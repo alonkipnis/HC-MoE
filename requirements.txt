@@ -1,0 +1,9 @@
+# Core scientific stack
+numpy
+scipy
+pandas
+matplotlib
+statsmodels
+
+# Parquet support for pandas.read_parquet
+pyarrow
