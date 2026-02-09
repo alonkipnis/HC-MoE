@@ -1,12 +1,10 @@
-
 import numpy as np
 import statsmodels.api as sm
 from scipy.optimize import curve_fit
 from scipy.stats import t
 import matplotlib.pyplot as plt
-
 import matplotlib as mpl
-from scipy.integrate import trapz, cumtrapz
+from scipy.integrate import trapz, cumulative_trapezoid
 import pandas as pd
 
 mpl.style.use('ggplot')
@@ -15,15 +13,9 @@ mpl.style.use('ggplot')
 file_path = "measurements/layer_1.parquet"
 df = pd.read_parquet(file_path)
 
-
-import numpy as np
-import statsmodels.api as sm
-from scipy.interpolate import interp1d
-import matplotlib.pyplot as plt
-
-def fit_empirical_null(data, bins=71, quantile_range=(0.2, 0.8), fit_config=None, ax=None):
+def fit_empirical_null_lindsey(data, bins=71, quantile_range=(0.2, 0.8), fit_config=None, ax=None):
     """
-    Fits an empirical null distribution.
+    Fits an empirical null distribution using Lindsey's Method (Poisson Regression) or curve fit.
     
     Parameters:
         fit_config (dict): {'type': 'student_t' | 'laplace' | 'gaussian'}
@@ -77,40 +69,77 @@ def fit_empirical_null(data, bins=71, quantile_range=(0.2, 0.8), fit_config=None
         null_pdf = null_pdf_glm
 
     # ==========================================
-    # BRANCH 2: Non-Linear Fit (Student's t)
+    # BRANCH 2: Non-Linear Fit (Student's t or Skewed t)
     # ==========================================
-    elif fit_type == 'student_t':
-        # Model: Count = Amplitude * PDF(x)
-        def t_model_counts(x, df, loc, scale, amp):
-            return amp * t.pdf(x, df, loc, scale)
-
-        # Initial Guesses
-        # We guess df=4 (heavy tails), loc=median, scale=std
-        p0 = [
-            fit_config.get('df', 4.0),      
-            np.median(data),                
-            np.std(data),                   
-            np.max(y_train) * 5             # Amplitude guess
-        ]
+    elif fit_type in ['student_t', 'skewed_t']:
         
-        # Bounds: df>2, scale>0, amp>0
-        bounds = ([2, -np.inf, 1e-6, 0], [10, np.inf, np.inf, np.inf])
+        if fit_type == 'student_t':
+            # Model: Count = Amplitude * PDF(x)
+            def t_model_counts(x, df, loc, scale, amp):
+                return amp * t.pdf(x, df, loc, scale)
 
-        try:
-            # We fit using the lowercase x_train defined above
-            popt, _ = curve_fit(t_model_counts, x_train, y_train, p0=p0, bounds=bounds)
-        except RuntimeError:
-            print("Curve fit failed to converge.")
-            return None
-
-        df_fit, loc_fit, scale_fit, amp_fit = popt
-        print(f"Fitted Student's t: df={df_fit:.2f}, loc={loc_fit:.2f}, scale={scale_fit:.2f}")
-
-        # Return the pure PDF function immediately
-        def null_pdf_t(x):
-            return t.pdf(x, df_fit, loc_fit, scale_fit)
+            # Initial Guesses
+            p0 = [
+                fit_config.get('df', 4.0),      
+                np.median(data),                
+                np.std(data),                   
+                np.max(y_train) * 5             # Amplitude guess
+            ]
             
-        null_pdf = null_pdf_t
+            # Bounds: df>2, scale>0, amp>0
+            bounds = ([2, -np.inf, 1e-6, 0], [10, np.inf, np.inf, np.inf])
+
+            try:
+                popt, _ = curve_fit(t_model_counts, x_train, y_train, p0=p0, bounds=bounds)
+            except RuntimeError:
+                print("Curve fit failed to converge.")
+                return None
+
+            df_fit, loc_fit, scale_fit, amp_fit = popt
+            print(f"Fitted Student's t: df={df_fit:.2f}, loc={loc_fit:.2f}, scale={scale_fit:.2f}")
+
+            # Return the pure PDF function immediately
+            def null_pdf_t(x):
+                return t.pdf(x, df_fit, loc_fit, scale_fit)
+                
+            null_pdf = null_pdf_t
+            
+        elif fit_type == 'skewed_t':
+            from scipy.stats import nct
+            
+            # Model: Count = Amplitude * PDF(x) using Non-central t distribution
+            # Parameters: df (degrees of freedom), nc (non-centrality), loc, scale, amp
+            def skewed_t_model_counts(x, df, nc, loc, scale, amp):
+                return amp * nct.pdf(x, df, nc, loc=loc, scale=scale)
+
+            # Initial Guesses
+            # We guess df=4, nc=0 (symmetric start), loc=median, scale=std
+            p0 = [
+                fit_config.get('df', 4.0),
+                0.0,                            # nc (skewness parameter)
+                np.median(data),                
+                np.std(data),                   
+                np.max(y_train) * 5             # Amplitude guess
+            ]
+            
+            # Bounds: df>2, scale>0, amp>0
+            # nc is unbounded
+            bounds = ([2, -np.inf, -np.inf, 1e-6, 0], [np.inf, np.inf, np.inf, np.inf, np.inf])
+
+            try:
+                popt, _ = curve_fit(skewed_t_model_counts, x_train, y_train, p0=p0, bounds=bounds)
+            except RuntimeError:
+                print("Curve fit failed to converge.")
+                return None
+
+            df_fit, nc_fit, loc_fit, scale_fit, amp_fit = popt
+            print(f"Fitted Skewed t: df={df_fit:.2f}, nc={nc_fit:.2f}, loc={loc_fit:.2f}, scale={scale_fit:.2f}")
+
+            # Return the pure PDF function immediately
+            def null_pdf_skewed_t(x):
+                return nct.pdf(x, df_fit, nc_fit, loc=loc_fit, scale=scale_fit)
+                
+            null_pdf = null_pdf_skewed_t
 
     else:
         raise ValueError(f"Unknown fit type: {fit_type}")
@@ -141,9 +170,9 @@ def fit_empirical_null(data, bins=71, quantile_range=(0.2, 0.8), fit_config=None
     return null_pdf
 
 
-def get_pvalues_from_poly(poly, data):
+def get_pvalues_from_pdf_func(pdf_func, data):
     """
-    Calculate two-sided p-values for data based on the density exp(poly(x)).
+    Calculate two-sided p-values for data based on a PDF function.
     """
     # Define a grid for integration covering the data range
     # Extend slightly beyond min/max to cover tails
@@ -152,18 +181,18 @@ def get_pvalues_from_poly(poly, data):
     grid = np.linspace(x_min - margin, x_max + margin, 10000)
     
     # Calculate density
-    pdf = np.exp(poly(grid))
+    pdf_vals = pdf_func(grid)
     
-    # Normalize density
-    normalization = trapz(pdf, grid)
+    # Normalize density (just in case the function isn't perfectly normalized)
+    normalization = trapz(pdf_vals, grid)
     if normalization == 0 or np.isnan(normalization) or np.isinf(normalization):
-        # Fallback if integration fails (e.g. diverging poly)
+        # Fallback if integration fails
         return np.ones_like(data)
         
-    pdf_norm = pdf / normalization
+    pdf_norm = pdf_vals / normalization
     
     # Calculate CDF
-    cdf_grid = cumtrapz(pdf_norm, grid, initial=0)
+    cdf_grid = cumulative_trapezoid(pdf_norm, grid, initial=0)
     # Ensure CDF goes from 0 to 1
     cdf_grid /= cdf_grid[-1]
     
@@ -188,11 +217,20 @@ if __name__ == "__main__":
         fig, axes = plt.subplots(1, 2, figsize=(16, 6))
         
         # Left: Empirical Null Fit
-        null_pdf = fit_empirical_null(logits, fit_config={'type': 'student_t'}, bins=71, quantile_range=(0.05, 0.95), ax=axes[0])
+        null_pdf = fit_empirical_null_lindsey(logits, bins=71, quantile_range=(0.05, 0.95), ax=axes[0],
+         fit_config={'type': 'skewed_t'},
+         #fit_config={'type': 'student_t'},
+         #fit_config={'type': 'laplace'},
+         #fit_config={'type': 'gaussian'},
+         )
         
 
         # Calculate P-values under the fitted polynomial null
-        p_values = null_pdf(logits)
+        # We integrate the PDF to get the CDF and then 2-sided p-values
+        if null_pdf is not None:
+             p_values = get_pvalues_from_pdf_func(null_pdf, logits)
+        else:
+             p_values = np.ones_like(logits)
         
         neg_log_pvals = -np.log(p_values)
         
@@ -222,9 +260,9 @@ if __name__ == "__main__":
         max_val = max(theoretical_quantiles.max(), sample_quantiles.max())
         axes[1].plot([0, max_val], [0, max_val], 'k--', label='Exp(1)')
         
-        # limit x and y axes to [0,20]
-        axes[1].set_xlim(0, 20)
-        axes[1].set_ylim(0, 20)
+        # limit x and y axes to [0,7]
+        axes[1].set_xlim(0, 7)
+        axes[1].set_ylim(0, 7)
         axes[1].set_xlabel('Theoretical Quantiles (Exp(1))')
         axes[1].set_ylabel('Sample Quantiles (-log(P))')
         axes[1].set_title(f"QQ Plot of -log(P-values)")
@@ -233,4 +271,3 @@ if __name__ == "__main__":
         plt.tight_layout()
         plt.savefig(f"figures/qq_plot_logit_{i}.png")
         plt.show()
-    
