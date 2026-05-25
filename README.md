@@ -1,62 +1,16 @@
 # HC-MoE
 
-Empirical-null fitting utilities and scripts for analyzing logits and visualizing QQ plots.
+This project studies whether the **Higher Criticism (HC)** statistic — applied to per-expert routing p-values in Mixture-of-Experts (MoE) language models — predicts per-token cross-entropy loss and the *intelligence gain* obtained by scaling from a small model to a large one within the same family.
 
-This repo includes two complementary approaches for estimating an empirical null and computing p-values for model outputs (e.g., logits):
-- Efron-style central matching (polynomial fit to log-density) — `empirical_null.py`
-- Lindsey-inspired approaches (GLM with Laplace/Gaussian shapes or Student's t) — `empirical_null_lindsey.py`
+The core question: do routing anomalies (a few experts firing far from their null behaviour) flag tokens that are harder to predict, and do they reveal where a larger model has an advantage?
 
-Both scripts produce QQ plots of −log(p) against Exp(1) theoretical quantiles to assess calibration.
-
-## Quick Start
-
-- Python 3.9+ recommended
-- Install dependencies:
-
-```
-pip install -r requirements.txt
-```
-
-## Data
-
-- The scripts expect a Parquet file at `measurements/layer_1.parquet` containing columns like `logit_<i>`.
-- Example CSVs may also be present in `measurements/`, but the primary scripts read Parquet.
-
-## Usage
-
-Efron central matching approach (plots shown interactively):
-
-```
-python empirical_null.py
-```
-
-- Randomly selects several `logit_<i>` blocks from `layer_1.parquet`.
-- Left panel: histogram with fitted empirical null (polynomial in log-density of standardized data).
-- Right panel: QQ plot of −log(p) vs Exp(1).
-
-Lindsey-inspired methods (saves figures):
-
-```
-python empirical_null_lindsey.py
-```
-
-- Fits one of: `laplace`, `gaussian` (via Poisson GLM) or `student_t` (non-linear fit). The script currently uses `student_t`.
-- Saves figures to `figures/qq_plot_logit_<i>.png`.
+For a full description of the research goals, nomenclature, findings, and open questions, see the **[research report](HC_MoE_Report.html)** (open in a browser).
 
 ## Repo Structure
 
-- `empirical_null.py` — central matching implementation and QQ plotting.
-- `empirical_null_lindsey.py` — GLM / Student's t variants and QQ plotting.
-- `measurements/` — example measurement data (Parquet and CSVs).
-- `figures/` — generated images (gitignored by default).
-- `requirements.txt` — Python dependencies.
-- `.gitignore` — ignores envs, caches, figures, OS files.
-
-## Notes
-
-- If you prefer deterministic runs, set a NumPy seed at the top of the scripts before sampling blocks.
-- Adjust bin counts, quantile ranges, and fit options inside the scripts to match your dataset.
-
-## Contributing
-
-Issues and PRs are welcome. Please keep changes minimal and focused.
+- `empirical_null.py` — empirical null estimation via central matching (Efron-style).
+- `empirical_null_lindsey.py` — GLM / Student's t null estimation (Lindsey-inspired).
+- `measurements/` — correlation CSVs and summary tables used in the report.
+- `figures/` — generated plots (gitignored by default).
+- `HC_MoE_Report.html` — self-contained research report with interactive figures.
+- `requirements.txt` — Python dependencies (`pip install -r requirements.txt`).
