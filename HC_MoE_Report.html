@@ -552,15 +552,15 @@
 
   <div class="q-block">
     <span class="q-badge">High Priority</span>
-    <h4>Q2. Does the small model's own HC show the same anti-correlation with Intelligence Gain?</h4>
-    <p>All current correlations use the <em>big</em> model's routing HC. If both models' HCs anti-correlate with Diff equally, the effect is a property of the token. If only the big model's HC does, it is a property of scale-specific routing.</p>
+    <h4>Q2. Does the small model's own HC show the same positive correlation with Intelligence Gain?</h4>
+    <p>All current correlations use the <em>big</em> model's routing HC. If both models' HCs correlate equally positively with Diff, the effect is a property of the token — anomalous routing inherently marks tokens where scale helps, regardless of which model's routing we look at. If the correlation is stronger (or only present) for the big model's HC, the large model's routing specialisation is itself partly responsible for the intelligence gain signal.</p>
     <div class="settlement"><strong>Settlement:</strong> Compute HC from the small model's routing signals and compute Pearson(HC_small, Diff). Compare to Pearson(HC_big, Diff). A Fisher z-test on the difference of correlations establishes whether the asymmetry is significant. Run for all 24 estimator × HC-file configurations on Qwen/lambada.</div>
   </div>
 
   <div class="q-block">
     <span class="q-badge">High Priority</span>
     <h4>Q3. Are the Pearson correlations statistically significant?</h4>
-    <p>Values of −0.13 to −0.16 look meaningful but we have not established significance against a token-shuffle null, nor accounted for autocorrelation in the CE sequence.</p>
+    <p>Values of +0.13 to +0.16 for Pearson(HC, Diff) on Qwen/lambada look meaningful, but we have not established significance against a token-shuffle null, nor accounted for autocorrelation in the CE loss sequence (adjacent tokens within a passage are not independent).</p>
     <div class="settlement"><strong>Settlement:</strong> (a) Permute HC values against CE loss and Diff 10 000 times; build an empirical null distribution and report achieved p-values. (b) Estimate effective sample size using the autocorrelation function of the CE loss sequence (adjacent tokens are correlated within a passage). (c) Apply a block-bootstrap respecting passage boundaries to compute confidence intervals on Pearson(HC, Diff).</div>
   </div>
 
