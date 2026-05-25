@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HC-MoE: Routing Signals and Token Predictability in MoE Language Models</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --primary:       #1e3a8a;
+    --primary-mid:   #2563eb;
+    --primary-light: #bfdbfe;
+    --accent:        #0f766e;
+    --bg:            #f8fafc;
+    --card:          #ffffff;
+    --text:          #1e293b;
+    --muted:         #64748b;
+    --border:        #e2e8f0;
+
+    --c-big:    #2563eb;
+    --c-small:  #dc2626;
+    --c-diff:   #16a34a;
+    --c-pbig:   rgba(37,99,235,0.38);
+    --c-pdiff:  rgba(22,163,74,0.38);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.75;
+    font-size: 15px;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0;
+    background: var(--primary);
+    display: flex; align-items: center; gap: 0.25rem;
+    padding: 0 2rem;
+    height: 48px;
+    z-index: 999;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+    overflow-x: auto;
+  }
+  nav .brand {
+    color: var(--primary-light);
+    font-weight: 700; font-size: 0.88rem;
+    letter-spacing: .5px;
+    white-space: nowrap;
+    margin-right: 1.25rem;
+    flex-shrink: 0;
+  }
+  nav a {
+    color: #93c5fd; text-decoration: none;
+    font-size: 0.82rem; white-space: nowrap;
+    padding: 0.3rem 0.65rem; border-radius: 5px;
+    transition: background 0.15s, color 0.15s;
+    flex-shrink: 0;
+  }
+  nav a:hover { background: rgba(255,255,255,0.15); color: #fff; }
+
+  /* ── LAYOUT ── */
+  main {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 72px 2rem 5rem;
+  }
+
+  /* ── HEADER ── */
+  .report-header {
+    padding: 2.5rem 0 2.5rem;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 3rem;
+    text-align: center;
+  }
+  .report-header h1 {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--primary);
+    line-height: 1.3;
+    margin-bottom: 0.5rem;
+  }
+  .report-header .subtitle {
+    color: var(--muted); font-size: 1rem; margin-bottom: 0.4rem;
+  }
+  .report-header .date {
+    color: var(--muted); font-size: 0.82rem; margin-bottom: 1.5rem;
+  }
+  .abstract {
+    background: #eff6ff;
+    border-left: 4px solid var(--primary-mid);
+    border-radius: 0 8px 8px 0;
+    padding: 1.1rem 1.4rem;
+    text-align: left;
+    font-size: 0.93rem;
+    color: #1e3a8a;
+  }
+  .abstract strong { color: var(--primary); }
+
+  /* ── SECTIONS ── */
+  section { margin-bottom: 3.5rem; scroll-margin-top: 60px; }
+
+  h2 {
+    font-size: 1.3rem; font-weight: 800;
+    color: var(--primary);
+    border-bottom: 2px solid var(--primary-mid);
+    padding-bottom: 0.35rem;
+    margin-bottom: 1.4rem;
+  }
+  h3 {
+    font-size: 1.05rem; font-weight: 700;
+    color: var(--text);
+    margin: 1.6rem 0 0.65rem;
+  }
+  p { margin-bottom: 0.85rem; }
+  ul, ol { padding-left: 1.5rem; margin-bottom: 0.85rem; }
+  li { margin-bottom: 0.35rem; }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.4rem 1.6rem;
+    margin-bottom: 1.4rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  }
+
+  /* ── TABLES ── */
+  .table-wrap { overflow-x: auto; margin-bottom: 1rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  thead th {
+    background: var(--primary); color: #fff;
+    padding: 0.6rem 1rem; text-align: left;
+    font-weight: 700; font-size: 0.84rem;
+  }
+  tbody td {
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tbody tr:nth-child(even) td { background: #f8fafc; }
+
+  code {
+    background: #f1f5f9; border: 1px solid #e2e8f0;
+    border-radius: 4px; padding: 0.1rem 0.4rem;
+    font-family: 'SF Mono','Fira Code','Cascadia Code', monospace;
+    font-size: 0.82em;
+  }
+
+  /* ── FINDINGS ── */
+  .finding {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 5px solid var(--primary-mid);
+    border-radius: 0 10px 10px 0;
+    padding: 1.2rem 1.5rem;
+    margin: 1.6rem 0;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .finding h3 { color: var(--primary); margin-top: 0; font-size: 1rem; }
+  .finding.gemma   { border-left-color: #dc2626; }
+  .finding.hellaswag { border-left-color: #9333ea; }
+  .finding.fisher  { border-left-color: var(--accent); }
+  .finding.agnostic { border-left-color: #f59e0b; }
+
+  /* ── CHARTS ── */
+  .chart-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem 1rem;
+    margin: 1.4rem 0;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .chart-wrap canvas { max-height: 300px; }
+  .fig-caption {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-style: italic;
+    margin-top: 0.7rem;
+    line-height: 1.5;
+  }
+  .legend-row {
+    display: flex; flex-wrap: wrap;
+    gap: 1rem; justify-content: center;
+    margin-bottom: 0.75rem;
+  }
+  .leg {
+    display: flex; align-items: center; gap: 0.4rem;
+    font-size: 0.8rem; color: var(--muted);
+  }
+  .leg-swatch {
+    width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0;
+  }
+
+  /* ── OPEN QUESTIONS ── */
+  .q-block {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.2rem 1.5rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .q-badge {
+    display: inline-block;
+    font-size: 0.68rem; font-weight: 800;
+    letter-spacing: .6px; text-transform: uppercase;
+    padding: 0.2rem 0.65rem; border-radius: 20px;
+    margin-bottom: 0.45rem;
+    color: #fff;
+    background: var(--primary);
+  }
+  .q-badge.med  { background: var(--accent); }
+  .q-badge.low  { background: var(--muted); }
+  .q-block h4   { font-size: 0.97rem; margin: 0.25rem 0 0.5rem; color: var(--text); }
+  .q-block p    { font-size: 0.9rem; margin-bottom: 0.6rem; color: #334155; }
+  .settlement {
+    background: #f0fdf4;
+    border-left: 3px solid var(--c-diff);
+    border-radius: 0 6px 6px 0;
+    padding: 0.75rem 1rem;
+    font-size: 0.88rem;
+    color: #166534;
+    margin-top: 0.5rem;
+  }
+  .settlement strong { color: #15803d; }
+
+  @media (max-width: 640px) {
+    main { padding: 64px 1rem 4rem; }
+    .report-header h1 { font-size: 1.3rem; }
+    nav { padding: 0 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════ NAVIGATION ════════════════════════════════ -->
+<nav>
+  <span class="brand">HC-MoE Report</span>
+  <a href="#goals">Goals</a>
+  <a href="#nomenclature">Nomenclature</a>
+  <a href="#setup">Setup</a>
+  <a href="#findings">Findings</a>
+  <a href="#questions">Open Questions</a>
+</nav>
+
+<main>
+
+<!-- ════════════════════════════════ HEADER ════════════════════════════════════ -->
+<div class="report-header">
+  <h1>Routing Signal Strength and Token Predictability<br>in Mixture-of-Experts Language Models</h1>
+  <div class="subtitle">Higher Criticism of Expert Routing P-values as a Predictor of CE Loss and Intelligence Gain</div>
+  <div class="date">May 2026 &nbsp;·&nbsp; Internal Research Report</div>
+  <div class="abstract">
+    <strong>Abstract.</strong> We study whether the Higher Criticism (HC) statistic — applied to per-expert routing P-values in Mixture-of-Experts (MoE) language models — predicts per-token cross-entropy (CE) loss and, crucially, the <em>intelligence gain</em>: the reduction in CE loss attributable to a larger model relative to a smaller model in the same family. HC captures the presence of a sparse anomaly among experts (a few specialists firing far from their null behaviour), while the Fisher combination statistic captures dense, globally elevated signal. We evaluate two model families (Qwen MoE, Gemma 4), two benchmarks (lambada, hellaswag), six null estimators, and four HC aggregation strategies. Our central finding is a consistent negative correlation between HC and intelligence gain for Qwen on lambada: anomalous routing does <em>not</em> flag tokens where scale helps. Gemma exhibits a sign reversal of the HC–CE relationship, tentatively attributed to its permanently activated shared expert. HC adds predictive power beyond Fisher after partialling, and per-expert aggregation carries substantially more signal than map-level aggregation.
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ 1. GOALS ═══════════════════════════════════ -->
+<section id="goals">
+  <h2>1. Research Goals</h2>
+  <div class="card">
+    <p>This study asks five concrete questions about MoE expert routing signals and their relationship to language model performance:</p>
+    <ol>
+      <li><strong>Token difficulty encoding.</strong> Does HC of the routing P-values correlate with the per-token CE loss of an MoE model? Do tokens that activate anomalous expert subsets also tend to be harder to predict?</li>
+      <li><strong>Scale asymmetry.</strong> Does the same HC statistic predict CE loss <em>differently</em> for large vs. small models in the same family, sharing the same tokeniser and evaluated on identical data?</li>
+      <li><strong>Intelligence gain.</strong> Does HC predict the token-level <em>reduction</em> in CE loss when moving from a small model to a large one (<code>Diff = Small CE − Big CE</code>)? We treat Diff as a proxy for the benefit of scale ("intelligence gain").</li>
+      <li><strong>HC beyond Fisher.</strong> Does HC retain predictive power for CE loss and Diff after partialling out the Fisher combination statistic, which captures broad (non-sparse) routing deviations?</li>
+      <li><strong>Robustness.</strong> Are the correlations stable across six null estimators (GMM, GLM, StudentT, StudentTSkewed, KDE, JohnsonSU) and across per-expert vs. aggregated HC variants?</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ══════════════════════════════ 2. NOMENCLATURE ════════════════════════════ -->
+<section id="nomenclature">
+  <h2>2. Nomenclature</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Term / Symbol</th><th>Definition</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>CE loss</code></td>
+        <td>Cross-entropy (negative log-probability) loss of a model on a single token. Lower CE = better prediction.</td>
+      </tr>
+      <tr>
+        <td><code>Big CE</code></td>
+        <td>CE loss of the <em>larger</em> model in the family pair (Qwen MoE large, or Gemma 4 26B-A4B).</td>
+      </tr>
+      <tr>
+        <td><code>Small CE</code></td>
+        <td>CE loss of the <em>smaller</em> model in the same family (Qwen Small MoE, or Gemma 4 5B dense).</td>
+      </tr>
+      <tr>
+        <td><code>Diff</code> — Intelligence Gain</td>
+        <td><code>Diff = Small CE − Big CE</code>. Positive values indicate tokens where the large model predicts better. Treated as a proxy for the benefit of increased scale ("intelligence gain"). Both models share the same tokeniser and are evaluated on identical token sequences.</td>
+      </tr>
+      <tr>
+        <td><code>HC</code> — Higher Criticism</td>
+        <td>Higher Criticism statistic applied to the vector of per-expert routing P-values for a given token. High HC signals a <em>sparse anomaly</em>: a few experts activated far more (or less) than their null behaviour predicts. HC is the strength of the sparse signal; it does not require many experts to be anomalous, only a few extreme ones.</td>
+      </tr>
+      <tr>
+        <td><code>Fisher</code></td>
+        <td>Fisher combination statistic (sum of −2 log p-values) applied to the same expert routing P-values. High Fisher signals a <em>dense anomaly</em>: many experts are collectively elevated beyond their null. Fisher and HC are complementary: the former captures broad deviations, the latter captures concentrated ones.</td>
+      </tr>
+      <tr>
+        <td><code>Max Per Row</code></td>
+        <td>The maximum HC value across expert dimensions for a given token (row). Summarises the single strongest expert-level anomaly per token.</td>
+      </tr>
+      <tr>
+        <td><code>per_expert HC</code></td>
+        <td>HC computed from P-values derived from individual expert routing probabilities — one P-value per expert. Captures which specific experts are anomalous for a token.</td>
+      </tr>
+      <tr>
+        <td><code>map_agg HC</code></td>
+        <td>HC computed from routing statistics that have been aggregated (mapped) at a coarser level before the HC test. Less granular than per-expert; dilutes individual expert anomalies.</td>
+      </tr>
+      <tr>
+        <td><code>_standard</code> / <code>_hat</code></td>
+        <td>Two variants of P-value computation: <em>standard</em> uses the raw routing statistic; <em>hat</em> uses an empirically corrected (estimated) version. Results are qualitatively similar across both variants.</td>
+      </tr>
+      <tr>
+        <td><code>Null estimator</code></td>
+        <td>The parametric distribution fitted to expert routing signals under the null (no anomaly). Six estimators are compared: GMM, GLM, StudentT, StudentTSkewed, KDE, JohnsonSU.</td>
+      </tr>
+      <tr>
+        <td><code>Pearson_Diff</code></td>
+        <td>Pearson correlation between HC (max per row) and Diff, computed across all tokens in the dataset.</td>
+      </tr>
+      <tr>
+        <td><code>Partial_Pearson_Diff</code></td>
+        <td>Pearson correlation between HC and Diff after partialling out (controlling for) the Fisher statistic. Isolates the unique predictive contribution of the sparse signal (HC) beyond the dense signal (Fisher).</td>
+      </tr>
+      <tr>
+        <td><code>_Q50</code> / <code>_Q90</code></td>
+        <td>Correlations computed on the subset of tokens with HC above the 50th or 90th percentile respectively. Probes whether the HC–CE relationship concentrates at the most anomalous tokens.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════ 3. SETUP ══════════════════════════════════ -->
+<section id="setup">
+  <h2>3. Experimental Setup</h2>
+  <div class="card">
+    <h3>Model Pairs</h3>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Pair label</th><th>Large Model</th><th>Small Model</th><th>Routing type</th><th>Expert config (large)</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Qwen</td>
+          <td>Qwen MoE (large)</td>
+          <td>Qwen Small MoE</td>
+          <td>Token-choice, top-k</td>
+          <td>Fine-grained experts, ~22B active params</td>
+        </tr>
+        <tr>
+          <td>Gemma 4</td>
+          <td>Gemma 4 26B-A4B</td>
+          <td>Gemma 4 5B (dense)</td>
+          <td>Token-choice, top-8 of 128 routed + 1 shared</td>
+          <td>128 routed experts + 1 always-on shared expert (3× size), ~4B active</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+    <p style="font-size:0.85rem;color:var(--muted);margin-top:0.4rem;">Both families use <strong>token-choice top-k routing</strong> — each token selects its top-k experts by router score. Gemma 4 26B uniquely adds a permanently activated <em>shared expert</em> that bypasses routing entirely.</p>
+
+    <h3>Datasets</h3>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Dataset</th><th>Task</th><th>Characteristics</th></tr></thead>
+      <tbody>
+        <tr><td>lambada</td><td>Next-word prediction</td><td>Long contexts, strong contextual cues; CE varies markedly token-to-token — good for detecting signal</td></tr>
+        <tr><td>hellaswag</td><td>Sentence completion (multiple-choice)</td><td>Shorter contexts, uniform format; smaller per-token CE variance; weaker signal environment</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3>Analysis Grid</h3>
+    <p>Six null estimators × four HC file types (per_expert_standard, per_expert_hat, map_agg_hat, map_agg_standard) = <strong>24 configurations</strong> per model-pair × dataset combination. Correlations reported: Pearson, Spearman, and Partial Pearson (controlling for Fisher), each for Big CE, Small CE, and Diff targets. Subset analyses at the Q50 and Q90 HC percentile thresholds are also included.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════ 4. FINDINGS ═════════════════════════════════ -->
+<section id="findings">
+  <h2>4. Findings</h2>
+
+  <!-- ── Fig 1: Overview ── -->
+  <h3>4.1  Overview: All Four Scenarios</h3>
+  <p>Figure 1 shows the mean Pearson correlations (averaged across all 24 estimator × HC-file configurations) between HC and: (i) Big model CE, (ii) Small model CE, and (iii) Intelligence Gain (Diff), for each of the four model-pair × dataset combinations. This provides a high-level map of the signal landscape.</p>
+
+  <div class="chart-wrap">
+    <div class="legend-row">
+      <div class="leg"><div class="leg-swatch" style="background:var(--c-big)"></div>HC ↔ Big Model CE</div>
+      <div class="leg"><div class="leg-swatch" style="background:var(--c-small)"></div>HC ↔ Small Model CE</div>
+      <div class="leg"><div class="leg-swatch" style="background:var(--c-diff)"></div>HC ↔ Intelligence Gain (Diff)</div>
+    </div>
+    <canvas id="fig1"></canvas>
+    <div class="fig-caption">Figure 1. Average Pearson correlations between HC (max per row) and CE metrics, aggregated across all 24 estimator × HC-file configurations. Bars above zero indicate positive correlation; bars below zero indicate negative. Error bars not shown at this aggregation level.</div>
+  </div>
+
+  <div class="finding">
+    <h3>Finding 1 — Only Qwen/lambada Shows a Meaningful HC–Intelligence Gain Signal</h3>
+    <p>Of the four scenarios, only Qwen on lambada produces a large, consistent Intelligence Gain correlation (Diff ≈ −0.13). Gemma on lambada shows near-zero Diff correlation despite showing HC–CE correlations of its own. Both model pairs on hellaswag show weak correlations throughout. The lambada format — next-word prediction with rich context — appears to be necessary for the signal to emerge.</p>
+  </div>
+
+  <!-- ── Fig 2: Estimator robustness ── -->
+  <h3>4.2  Qwen / lambada: Robustness Across Null Estimators</h3>
+  <p>Figure 2 shows per-estimator correlations for the <code>per_expert_standard</code> HC variant on Qwen/lambada. This tests whether the signal depends on the choice of null model or is structurally present regardless.</p>
+
+  <div class="chart-wrap">
+    <div class="legend-row">
+      <div class="leg"><div class="leg-swatch" style="background:var(--c-big)"></div>HC ↔ Big CE</div>
+      <div class="leg"><div class="leg-swatch" style="background:var(--c-small)"></div>HC ↔ Small CE</div>
+      <div class="leg"><div class="leg-swatch" style="background:var(--c-diff)"></div>HC ↔ Intelligence Gain</div>
+    </div>
+    <canvas id="fig2"></canvas>
+    <div class="fig-caption">Figure 2. Qwen/lambada: Pearson correlations with Big CE, Small CE, and Intelligence Gain across six null estimators (<code>per_expert_standard</code> HC). The asymmetry Small > Big and the negative Diff correlation are estimator-agnostic.</div>
+  </div>
+
+  <div class="finding">
+    <h3>Finding 2 — HC–CE Asymmetry: Small Model Is More Sensitive to Routing Anomalies</h3>
+    <p>For Qwen on lambada, <code>Pearson(HC, Small CE)</code> ≈ 0.15–0.23 consistently exceeds <code>Pearson(HC, Big CE)</code> ≈ 0.06–0.13 across all six estimators. Both are positive — tokens with anomalous expert routing (high HC) are harder for both models — but the small model suffers proportionally more at those tokens. This asymmetry is robust to all null estimator choices.</p>
+  </div>
+
+  <div class="finding">
+    <h3>Finding 3 — HC Anti-correlates with Intelligence Gain (Qwen/lambada)</h3>
+    <p>The Pearson correlation between HC and Intelligence Gain (Diff = Small CE − Big CE) is consistently <strong>negative</strong> for Qwen on lambada: approximately −0.13 to −0.16 for per-expert HC variants. This is the central finding: tokens where expert routing is most anomalous (sparse signal, high HC) are precisely the tokens where the large model has <em>less</em> advantage over the small model.</p>
+    <p>Interpreted under the HC lens: the presence of a few exceptionally specialised experts does not predict where scaling provides the most benefit. The intelligence gain of the large model appears to concentrate on tokens that look <em>routinely</em> handled from a routing perspective, not on tokens that trigger unusual expert selection.</p>
+    <p>The Q50 subset (tokens with HC above the median) shows an even stronger anti-correlation (≈ −0.21 for GMM), while the Q90 subset weakens to ≈ −0.07, suggesting the signal is most prominent in the upper-middle HC range rather than the very extremes.</p>
+  </div>
+
+  <!-- ── Fig 3: per_expert vs map_agg ── -->
+  <h3>4.3  Aggregation Strategy: per_expert vs. map_agg</h3>
+  <p>Figure 3 compares the four HC file types for Qwen/lambada using the GMM estimator. This isolates the effect of how routing signals are aggregated before HC is computed.</p>
+
+  <div class="chart-wrap">
+    <div class="legend-row">
+      <div class="leg"><div class="leg-swatch" style="background:var(--c-big)"></div>HC ↔ Big CE</div>
+      <div class="leg"><div class="leg-swatch" style="background:var(--c-small)"></div>HC ↔ Small CE</div>
+      <div class="leg"><div class="leg-swatch" style="background:var(--c-diff)"></div>HC ↔ Intelligence Gain</div>
+    </div>
+    <canvas id="fig3"></canvas>
+    <div class="fig-caption">Figure 3. Qwen/lambada (GMM estimator): Pearson correlations for four HC aggregation types. per_expert variants carry strong, consistent signals; map_agg variants are substantially weaker and change sign for Big/Small CE.</div>
+  </div>
+
+  <div class="finding agnostic">
+    <h3>Finding 4 — per_expert HC Carries Far More Signal than map_agg</h3>
+    <p>The per-expert HC (both <code>_standard</code> and <code>_hat</code> variants) yields strong positive correlations with CE loss and a clear negative correlation with Intelligence Gain. The map_agg HC variants show near-zero or negative correlations with CE loss, and a weaker (but still negative) correlation with Diff. This indicates that the informative signal is <em>individual-expert-level routing anomaly</em>: coarser aggregation dilutes it. Future work should prioritise per-expert HC.</p>
+  </div>
+
+  <!-- ── Fig 4: Raw vs Partial ── -->
+  <h3>4.4  HC Beyond Fisher: Sparse Signal Adds Unique Predictive Power</h3>
+  <p>Figure 4 compares raw Pearson and partial Pearson correlations between HC and Intelligence Gain (Diff), where the partial correlation controls for the Fisher statistic. Both are shown for Qwen/lambada <code>per_expert_standard</code> across all six estimators.</p>
+
+  <div class="chart-wrap">
+    <div class="legend-row">
+      <div class="leg"><div class="leg-swatch" style="background:var(--c-diff)"></div>Raw Pearson(HC, Diff)</div>
+      <div class="leg"><div class="leg-swatch" style="background:var(--c-pdiff); border:1.5px solid var(--c-diff)"></div>Partial Pearson(HC, Diff | Fisher)</div>
+    </div>
+    <canvas id="fig4"></canvas>
+    <div class="fig-caption">Figure 4. Qwen/lambada: Raw vs. partial Pearson correlation between HC and Intelligence Gain, across six null estimators. Partialling out Fisher reduces the magnitude modestly but the correlation remains negative, confirming HC's unique contribution.</div>
+  </div>
+
+  <div class="finding fisher">
+    <h3>Finding 5 — HC Has Unique Predictive Power Beyond Fisher</h3>
+    <p>After removing the variance explained by the Fisher statistic, HC still correlates negatively with Intelligence Gain: partial Pearson ≈ −0.09 to −0.15 (Qwen/lambada, per_expert). Fisher and HC are complementary: the dense signal (many experts collectively elevated) and the sparse signal (a few experts strongly anomalous) each independently predict where the large model's advantage is diminished. The sparse structure of routing — not merely its overall intensity — matters.</p>
+  </div>
+
+  <!-- ── Fig 5: Gemma sign reversal ── -->
+  <h3>4.5  Gemma / lambada: Sign Reversal</h3>
+  <p>Figure 5 shows the same analysis for Gemma 4 (26B-A4B vs. 5B) on lambada, using the GMM estimator across all four HC file types.</p>
+
+  <div class="chart-wrap">
+    <div class="legend-row">
+      <div class="leg"><div class="leg-swatch" style="background:var(--c-big)"></div>HC ↔ Big CE</div>
+      <div class="leg"><div class="leg-swatch" style="background:var(--c-small)"></div>HC ↔ Small CE</div>
+      <div class="leg"><div class="leg-swatch" style="background:var(--c-diff)"></div>HC ↔ Intelligence Gain</div>
+    </div>
+    <canvas id="fig5"></canvas>
+    <div class="fig-caption">Figure 5. Gemma/lambada (GMM estimator): Pearson correlations for four HC file types. In contrast to Qwen, high HC predicts <em>lower</em> CE loss (sign reversal) and near-zero Intelligence Gain correlation. The map_agg variants show the strongest negative CE correlations.</div>
+  </div>
+
+  <div class="finding gemma">
+    <h3>Finding 6 — Gemma Sign Reversal: High HC Predicts Easier Tokens</h3>
+    <p>In Gemma, per-expert HC correlates slightly <em>negatively</em> with CE loss (Big and Small) for most estimators, and map_agg HC shows strong negative correlations (≈ −0.20 to −0.25). This is the <strong>opposite</strong> of Qwen: high HC in Gemma flags tokens that are easier, not harder. Additionally, HC carries essentially no information about where the large Gemma model outperforms the small one (Intelligence Gain correlation ≈ 0 throughout).</p>
+    <p>Both Qwen and Gemma use token-choice top-k routing, ruling out routing paradigm as the explanation. The most architecturally distinctive feature of Gemma 4 26B is its <strong>permanently activated shared expert</strong> (3× the size of regular experts, always on regardless of routing). This may absorb general predictive work; the routed experts then specialise in narrower patterns. Under this hypothesis, high HC in Gemma flags tokens that are already well-served by the shared expert — thus easy — while the routed expert anomaly reflects specialisation rather than difficulty. This hypothesis is directly testable (see Open Questions, Q2).</p>
+  </div>
+
+  <!-- ── Fig 6: Dataset comparison ── -->
+  <h3>4.6  Dataset Dependence: lambada vs. hellaswag</h3>
+  <p>Figure 6 places all four scenarios side-by-side to highlight the dataset dependence of the signal.</p>
+
+  <div class="chart-wrap">
+    <div class="legend-row">
+      <div class="leg"><div class="leg-swatch" style="background:var(--c-big)"></div>HC ↔ Big CE</div>
+      <div class="leg"><div class="leg-swatch" style="background:var(--c-small)"></div>HC ↔ Small CE</div>
+      <div class="leg"><div class="leg-swatch" style="background:var(--c-diff)"></div>HC ↔ Intelligence Gain</div>
+    </div>
+    <canvas id="fig6"></canvas>
+    <div class="fig-caption">Figure 6. Summary Pearson correlations for Qwen and Gemma on both datasets (averaged over all configurations). The lambada signal dominates; hellaswag produces substantially weaker, less consistent patterns.</div>
+  </div>
+
+  <div class="finding hellaswag">
+    <h3>Finding 7 — Hellaswag Produces Weak, Inconsistent Patterns</h3>
+    <p>On hellaswag, correlations between HC and all CE metrics are substantially smaller in magnitude and inconsistent in sign across estimators and HC file types. The Intelligence Gain correlation for Qwen on hellaswag is approximately +0.013 on average — near zero and of opposite sign to lambada. For Gemma on hellaswag, small positive correlations appear for Big/Small CE but again near-zero Diff.</p>
+    <p>The dataset dependence points to a structural prerequisite: lambada's next-word prediction format generates high token-level CE variance and rich contextual routing signals. Hellaswag's shorter sentence-completion format may not produce sufficient token-level CE variability for the HC–loss coupling to emerge. Notably, an anomalously large <code>Avg_HC</code> value (≈ 10.9) appeared for StudentT on hellaswag/Qwen in one configuration, suggesting potential numerical instability of the StudentT estimator in low-signal environments.</p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════ 5. OPEN QUESTIONS ══════════════════════════ -->
+<section id="questions">
+  <h2>5. Open Questions &amp; How to Settle Them</h2>
+
+  <div class="q-block">
+    <span class="q-badge">High Priority</span>
+    <h4>Q1. Does HC provide signal beyond the single most extreme expert p-value (−log p<sub>min</sub>)?</h4>
+    <p>HC is designed to detect sparse signals distributed across <em>several</em> anomalous experts. However, if the routing anomaly is consistently dominated by a single expert, HC essentially reduces to −log p<sub>min</sub> — the negative log of the smallest p-value in the expert vector. In that case, all observed HC correlations with CE loss and Intelligence Gain would be attributable to one outlier expert, not a genuine multi-expert sparse structure. Distinguishing these two explanations is critical: the former implies a single specialist drives token difficulty; the latter implies a coordinated set of specialists does.</p>
+    <div class="settlement"><strong>Settlement:</strong> (a) Compute Pearson(−log p<sub>min</sub>, CE) and Pearson(−log p<sub>min</sub>, Diff) for all 24 configurations and compare directly with the corresponding HC correlations. If the values are nearly identical, HC is acting as a proxy for the dominant expert alone. (b) Compute the partial correlation Pearson(HC, Diff | −log p<sub>min</sub>): if it vanishes after controlling for p<sub>min</sub>, the multi-expert structure adds nothing. (c) Examine the empirical per-token distribution of the number of p-values falling below a significance threshold (e.g., 0.01, Bonferroni-corrected): if it is almost always 1, the data do not support a multi-expert sparse interpretation regardless of the HC magnitude. (d) Conversely, run the same correlation analysis using HC computed on the P-value vector with p<sub>min</sub> removed — if the signal survives, the second and further experts genuinely contribute.</div>
+  </div>
+
+  <div class="q-block">
+    <span class="q-badge">High Priority</span>
+    <h4>Q2. Does the small model's own HC show the same anti-correlation with Intelligence Gain?</h4>
+    <p>All current correlations use the <em>big</em> model's routing HC. If both models' HCs anti-correlate with Diff equally, the effect is a property of the token. If only the big model's HC does, it is a property of scale-specific routing.</p>
+    <div class="settlement"><strong>Settlement:</strong> Compute HC from the small model's routing signals and compute Pearson(HC_small, Diff). Compare to Pearson(HC_big, Diff). A Fisher z-test on the difference of correlations establishes whether the asymmetry is significant. Run for all 24 estimator × HC-file configurations on Qwen/lambada.</div>
+  </div>
+
+  <div class="q-block">
+    <span class="q-badge">High Priority</span>
+    <h4>Q3. Are the Pearson correlations statistically significant?</h4>
+    <p>Values of −0.13 to −0.16 look meaningful but we have not established significance against a token-shuffle null, nor accounted for autocorrelation in the CE sequence.</p>
+    <div class="settlement"><strong>Settlement:</strong> (a) Permute HC values against CE loss and Diff 10 000 times; build an empirical null distribution and report achieved p-values. (b) Estimate effective sample size using the autocorrelation function of the CE loss sequence (adjacent tokens are correlated within a passage). (c) Apply a block-bootstrap respecting passage boundaries to compute confidence intervals on Pearson(HC, Diff).</div>
+  </div>
+
+  <div class="q-block">
+    <span class="q-badge med">Medium Priority</span>
+    <h4>Q4. Does the HC–Diff signal concentrate in specific Diff quantiles?</h4>
+    <p>The Q50/Q90 HC-subset analyses hint at non-linearity, but the direction is ambiguous. We need a clean conditional analysis by Diff decile.</p>
+    <div class="settlement"><strong>Settlement:</strong> Bin tokens into Diff deciles. Compute Pearson(HC, Diff) within each decile and plot the profile. If the anti-correlation strengthens in the top deciles (largest intelligence gain), HC identifies a regime where scale helps but routing is anomalous — a potential contradiction. If it weakens, the anti-correlation is driven by the bulk of tokens where Diff is near zero.</div>
+  </div>
+
+  <div class="q-block">
+    <span class="q-badge med">Medium Priority</span>
+    <h4>Q5. Does the signal replicate on a third dataset with different characteristics?</h4>
+    <p>The lambada vs. hellaswag contrast might be due to format (next-word vs. completion), domain, or CE variance. A third dataset would disambiguate.</p>
+    <div class="settlement"><strong>Settlement:</strong> Run the full pipeline on (a) WikiText-103 (long-document causal LM, high CE variance, similar format to lambada) and (b) a reasoning-heavy dataset such as MMLU or ARC. If WikiText-103 shows a similar pattern to lambada, format and CE variance are the key factors. If MMLU shows a similar pattern despite different format, domain knowledge is key.</div>
+  </div>
+
+</section>
+
+</main>
+
+<!-- ════════════════════════════ CHART.JS CODE ══════════════════════════════════ -->
+<script>
+/* ── Global defaults ── */
+Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+Chart.defaults.font.size = 12;
+Chart.defaults.color = '#475569';
+
+const C = {
+  big:   '#2563eb',
+  small: '#dc2626',
+  diff:  '#16a34a',
+  pdiff: 'rgba(22,163,74,0.38)',
+};
+
+/* ── Zero-line plugin ── */
+const zeroLine = {
+  id: 'zeroLine',
+  afterDatasetsDraw(chart) {
+    const { ctx, chartArea: { left, right }, scales: { y } } = chart;
+    if (!y) return;
+    const yPos = y.getPixelForValue(0);
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(left, yPos);
+    ctx.lineTo(right, yPos);
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([]);
+    ctx.stroke();
+    ctx.restore();
+  }
+};
+Chart.register(zeroLine);
+
+/* ── Helper ── */
+function bar(id, labels, datasets, yMin, yMax) {
+  new Chart(document.getElementById(id), {
+    type: 'bar',
+    data: { labels, datasets: datasets.map(d => ({ ...d, borderRadius: 4, barPercentage: 0.65, categoryPercentage: 0.75 })) },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y.toFixed(3)}` } }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxRotation: 0 } },
+        y: {
+          min: yMin, max: yMax,
+          grid: { color: '#f1f5f9' },
+          ticks: { callback: v => v.toFixed(2) }
+        }
+      }
+    }
+  });
+}
+
+/* ══════════════════════════════════════════════════
+   Figure 1 — Overview: all four scenarios
+   Values from summary_table_model_pair_dataset.csv
+   ══════════════════════════════════════════════════ */
+bar('fig1',
+  ['Gemma / hellaswag', 'Gemma / lambada', 'Qwen / hellaswag', 'Qwen / lambada'],
+  [
+    { label: 'HC ↔ Big Model CE',        data: [ 0.028, -0.150,  0.093,  0.058], backgroundColor: C.big   },
+    { label: 'HC ↔ Small Model CE',      data: [ 0.033, -0.145,  0.085,  0.136], backgroundColor: C.small },
+    { label: 'HC ↔ Intelligence Gain',   data: [-0.021, -0.007,  0.013, -0.128], backgroundColor: C.diff  },
+  ],
+  -0.22, 0.22
+);
+
+/* ══════════════════════════════════════════════════
+   Figure 2 — Qwen/lambada estimator robustness
+   HC file: per_expert_standard
+   Values from correlation_Qwen_summary_loss_diff_small.csv rows 2,6,10,14,18,22
+   ══════════════════════════════════════════════════ */
+bar('fig2',
+  ['GMM', 'GLM', 'StudentT', 'StudentTSkewed', 'KDE', 'JohnsonSU'],
+  [
+    { label: 'HC ↔ Big CE',             data: [0.131, 0.077, 0.062, 0.087, 0.086, 0.087], backgroundColor: C.big   },
+    { label: 'HC ↔ Small CE',           data: [0.229, 0.159, 0.150, 0.181, 0.175, 0.177], backgroundColor: C.small },
+    { label: 'HC ↔ Intelligence Gain',  data:[-0.161,-0.134,-0.146,-0.155,-0.147,-0.148], backgroundColor: C.diff  },
+  ],
+  -0.28, 0.30
+);
+
+/* ══════════════════════════════════════════════════
+   Figure 3 — Qwen/lambada per_expert vs map_agg
+   Estimator: GMM
+   Values from correlation_Qwen_summary_loss_diff_small.csv rows 2,3,4,5
+   ══════════════════════════════════════════════════ */
+bar('fig3',
+  ['per_expert\nstandard', 'per_expert\nhat', 'map_agg\nhat', 'map_agg\nstandard'],
+  [
+    { label: 'HC ↔ Big CE',            data: [ 0.131,  0.121, -0.050, -0.070], backgroundColor: C.big   },
+    { label: 'HC ↔ Small CE',          data: [ 0.229,  0.206,  0.015, -0.013], backgroundColor: C.small },
+    { label: 'HC ↔ Intelligence Gain', data: [-0.161, -0.139, -0.110, -0.097], backgroundColor: C.diff  },
+  ],
+  -0.28, 0.30
+);
+
+/* ══════════════════════════════════════════════════
+   Figure 4 — Raw vs Partial Pearson (Diff)
+   Qwen/lambada per_expert_standard, all estimators
+   Partial values from Partial_Pearson_Max_Per_Row_Diff column, rows 2,6,10,14,18,22
+   ══════════════════════════════════════════════════ */
+new Chart(document.getElementById('fig4'), {
+  type: 'bar',
+  data: {
+    labels: ['GMM', 'GLM', 'StudentT', 'StudentTSkewed', 'KDE', 'JohnsonSU'],
+    datasets: [
+      {
+        label: 'Raw Pearson(HC, Diff)',
+        data: [-0.161, -0.134, -0.146, -0.155, -0.147, -0.148],
+        backgroundColor: C.diff, borderRadius: 4, barPercentage: 0.55, categoryPercentage: 0.75
+      },
+      {
+        label: 'Partial Pearson(HC, Diff | Fisher)',
+        data: [-0.153, -0.118, -0.132, -0.090, -0.097, -0.102],
+        backgroundColor: C.pdiff, borderColor: C.diff, borderWidth: 1.5,
+        borderRadius: 4, barPercentage: 0.55, categoryPercentage: 0.75
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y.toFixed(3)}` } }
+    },
+    scales: {
+      x: { grid: { display: false } },
+      y: { min: -0.22, max: 0.02, grid: { color: '#f1f5f9' }, ticks: { callback: v => v.toFixed(2) } }
+    }
+  }
+});
+
+/* ══════════════════════════════════════════════════
+   Figure 5 — Gemma/lambada sign reversal
+   Estimator: GMM, all HC file types
+   Values from correlation_gemma_summary_loss_diff_small.csv rows 2,3,4,5
+   ══════════════════════════════════════════════════ */
+bar('fig5',
+  ['per_expert\nstandard', 'per_expert\nhat', 'map_agg\nhat', 'map_agg\nstandard'],
+  [
+    { label: 'HC ↔ Big CE',            data: [ 0.005, -0.042, -0.208, -0.246], backgroundColor: C.big   },
+    { label: 'HC ↔ Small CE',          data: [ 0.020, -0.029, -0.203, -0.245], backgroundColor: C.small },
+    { label: 'HC ↔ Intelligence Gain', data: [-0.050, -0.040, -0.002,  0.010], backgroundColor: C.diff  },
+  ],
+  -0.32, 0.12
+);
+
+/* ══════════════════════════════════════════════════
+   Figure 6 — Dataset comparison (summary averages)
+   ══════════════════════════════════════════════════ */
+bar('fig6',
+  ['Qwen\nlambada', 'Qwen\nhellaswag', 'Gemma\nlambada', 'Gemma\nhellaswag'],
+  [
+    { label: 'HC ↔ Big CE',            data: [ 0.058,  0.093, -0.150,  0.028], backgroundColor: C.big   },
+    { label: 'HC ↔ Small CE',          data: [ 0.136,  0.085, -0.145,  0.033], backgroundColor: C.small },
+    { label: 'HC ↔ Intelligence Gain', data: [-0.128,  0.013, -0.007, -0.021], backgroundColor: C.diff  },
+  ],
+  -0.22, 0.22
+);
+</script>
+
+</body>
+</html>
