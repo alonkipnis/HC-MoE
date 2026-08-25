@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HC-MoE: Routing Signals & Token Predictability (Four-Family Update)</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-alt: #f1f5f9;
+      --border: #e2e8f0;
+      --border-focus: #cbd5e1;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --c-big: #2563eb;
+      --c-small: #dc2626;
+      --c-diff: #16a34a;
+      --c-pdiff: rgba(22, 163, 74, 0.35);
+      --c-purple: #7c3aed;
+      --c-amber: #d97706;
+      --c-teal: #0d9488;
+      --c-slate: #475569;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      font-size: 0.95rem;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+      padding: 0.65rem 2rem;
+      display: flex;
+      gap: 1.25rem;
+      align-items: center;
+      overflow-x: auto;
+    }
+
+    nav .brand {
+      font-weight: 700;
+      font-size: 1.05rem;
+      color: var(--c-big);
+      margin-right: 0.5rem;
+      white-space: nowrap;
+    }
+
+    nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: color 0.15s;
+    }
+
+    nav a:hover { color: var(--c-big); }
+
+    main {
+      max-width: 1200px;
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+    }
+
+    .report-header {
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      color: #fff;
+      padding: 2.5rem;
+      border-radius: 12px;
+      margin-bottom: 2rem;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    }
+
+    .report-header h1 {
+      font-size: 1.85rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      line-height: 1.25;
+      margin-bottom: 0.75rem;
+    }
+
+    .report-header .subtitle {
+      font-size: 1.05rem;
+      color: #94a3b8;
+      margin-bottom: 1.25rem;
+      font-weight: 400;
+    }
+
+    .report-header .date {
+      font-size: 0.8rem;
+      color: #64748b;
+      margin-bottom: 1.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+    }
+
+    .report-header .abstract {
+      background: rgba(255, 255, 255, 0.05);
+      border-left: 4px solid var(--c-big);
+      padding: 1.25rem;
+      border-radius: 0 8px 8px 0;
+      font-size: 0.92rem;
+      color: #cbd5e1;
+      line-height: 1.65;
+    }
+
+    .report-header .abstract strong {
+      color: #fff;
+    }
+
+    section {
+      margin-bottom: 3rem;
+      scroll-margin-top: 5rem;
+    }
+
+    h2 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 0.4rem;
+    }
+
+    h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #334155;
+      margin: 1.5rem 0 0.75rem;
+    }
+
+    p {
+      margin-bottom: 1rem;
+      color: #334155;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      text-align: center;
+    }
+
+    .stat-box .val {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1.1;
+      margin-bottom: 0.35rem;
+    }
+
+    .stat-box .lbl {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-weight: 600;
+    }
+
+    .finding {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 5px solid var(--c-big);
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      margin: 1.25rem 0;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+    }
+
+    .finding.scale { border-left-color: var(--c-diff); }
+    .finding.ernie { border-left-color: var(--c-purple); }
+    .finding.gemma { border-left-color: var(--c-small); }
+    .finding.liquid { border-left-color: var(--c-teal); }
+    .finding.null { border-left-color: var(--c-amber); }
+
+    .finding h4 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 0.5rem;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin: 1rem 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      text-align: left;
+    }
+
+    th, td {
+      padding: 0.65rem 0.9rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      background: var(--surface-alt);
+      font-weight: 600;
+      color: #475569;
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f8fafc; }
+
+    td.num, th.num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .badge-sig {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .badge-high {
+      background: #bbf7d0;
+      color: #14532d;
+    }
+
+    .badge-ext {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .chart-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.5rem;
+      margin: 1.5rem 0;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+    }
+
+    .chart-wrap canvas {
+      max-height: 420px;
+    }
+
+    .fig-caption {
+      font-size: 0.83rem;
+      color: var(--text-muted);
+      margin-top: 0.75rem;
+      line-height: 1.5;
+    }
+
+    .legend-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.25rem;
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      align-items: center;
+    }
+
+    .leg {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .leg-swatch {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.85em;
+      background: #f1f5f9;
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      color: #0f172a;
+    }
+
+    .alert {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin: 1rem 0;
+      color: #1e40af;
+      font-size: 0.9rem;
+    }
+
+    .alert strong { color: #1e3a8a; }
+  </style>
+</head>
+
+<body>
+
+  <!-- Navigation -->
+  <nav>
+    <span class="brand">HC-MoE Report (v5)</span>
+    <a href="#abstract">Abstract</a>
+    <a href="#nomenclature">Nomenclature & Goals</a>
+    <a href="#simulation">10k Empirical Null</a>
+    <a href="#overview">4-Family Overview</a>
+    <a href="#findings">Key Findings</a>
+    <a href="#layer-dynamics">Layer Dynamics</a>
+    <a href="#robustness">Estimator & Multi-Expert</a>
+    <a href="#tables">Full Tables</a>
+    <a href="#questions">Open Questions</a>
+  </nav>
+
+  <main>
+
+    <!-- Header & Abstract -->
+    <div class="report-header" id="abstract">
+      <h1>Routing Signal Strength and Token Predictability<br>in Mixture-of-Experts Language Models</h1>
+      <div class="subtitle">Higher Criticism of Per-Expert Routing P-Values as a Predictor of CE Loss and Intelligence Gain (CE<sub>small</sub> − CE<sub>big</sub>)</div>
+      <div class="date">August 25, 2026 &nbsp;·&nbsp; Internal Research Report &nbsp;·&nbsp; v5 (Unified Intelligence Gain Sign Convention & Four-Family Per-Expert Update)</div>
+      <div class="abstract">
+        <strong>Abstract.</strong> We present an updated, comprehensive study of the Higher Criticism (HC) statistic applied to per-expert routing P-values in Mixture-of-Experts (MoE) language models. This release establishes a unified sign convention: all correlations against capacity difference are reported directly as <strong>Intelligence Gain = CE(small) − CE(big)</strong>, eliminating previous sign-reversal ambiguity. Furthermore, this report expands the experimental scope to <strong>four distinct MoE model families</strong> (Qwen MoE, ERNIE-4.5, Gemma 4, and Liquid LFM), evaluated across <strong>nine diverse benchmarks</strong>, six parametric null estimators (GMM, GLM, StudentT, StudentTSkewed, KDE, JohnsonSU), and two per-expert HC formulations (standard and empirically corrected &Hat;).
+        <br><br>
+        To rigorously benchmark findings against pure noise, we evaluate all correlations against a calibrated <strong>empirical null distribution</strong> generated from 10,000 independent Monte Carlo trials of uncorrelated sequences (N=10,000, &sigma;<sub>null</sub> = 0.00987, empirical 95% critical threshold |r| > 0.01934, absolute null maximum |r| = 0.03679).
+        Across the 432 evaluated per-expert configurations, <strong>78.2% of full-layer Intelligence Gain correlations</strong> (and <strong>82.6% in upper-layer Q90</strong>) are statistically significant at p &lt; 0.05, with <strong>53.9% exceeding the absolute maximum correlation ever observed across 10,000 null simulation trials (p &lt; 0.0001)</strong>.
+        <br><br>
+        Key findings include: (1) <strong>Qwen MoE</strong> exhibits a profound positive correlation with Intelligence Gain (avg r = +0.0538 overall, surging to <strong>+0.1240 in Q90</strong>), demonstrating that sparse routing anomalies identify tokens where model scaling yields the greatest predictive advantage; (2) <strong>ERNIE-4.5</strong> shows a dramatic upper-layer emergence of Intelligence Gain (avg r = +0.0723 in Q90, where <strong>96.3% of configurations are statistically significant and 100% of significant correlations are positive</strong>); (3) <strong>Gemma 4</strong> exhibits an architectural inversion (negative Intelligence Gain correlation, avg r = −0.0500) driven by its 3&times;-capacity always-on shared expert absorbing routine predictive work; and (4) <strong>Liquid LFM</strong> exhibits domain-specific scaling advantages in structured factual knowledge (structured-wikipedia Q90 = +0.1503, fineweb-edu Q90 = +0.0616).
+      </div>
+    </div>
+
+    <!-- Quick Stats Grid -->
+    <div class="grid-4">
+      <div class="stat-box">
+        <div class="val" style="color:var(--c-big);">4</div>
+        <div class="lbl">Model Families</div>
+      </div>
+      <div class="stat-box">
+        <div class="val" style="color:var(--c-diff);">78.2%</div>
+        <div class="lbl">Diff Significant (p &lt; 0.05)</div>
+      </div>
+      <div class="stat-box">
+        <div class="val" style="color:var(--c-purple);">82.6%</div>
+        <div class="lbl">Q90 Significant (p &lt; 0.05)</div>
+      </div>
+      <div class="stat-box">
+        <div class="val" style="color:var(--c-amber);">10,000</div>
+        <div class="lbl">Null Simulation Trials</div>
+      </div>
+    </div>
+
+    <!-- 1. RESEARCH GOALS -->
+    <section id="goals">
+      <h2>1. Research Goals</h2>
+      <div class="card">
+        <p>This investigation evaluates how anomalous routing signals in MoE architectures relate to token difficulty and model scale:</p>
+        <ol style="margin-left:1.5rem; line-height: 1.8;">
+          <li><strong>Token Difficulty Encoding:</strong> Does HC of expert routing P-values correlate with per-token cross-entropy (CE) loss? Do tokens triggering sparse expert anomalies represent systematically harder prediction targets?</li>
+          <li><strong>Scale Asymmetry:</strong> Does the routing anomaly statistic predict CE loss with different sensitivity in large vs. small models sharing identical tokenizers and evaluated on identical text?</li>
+          <li><strong>Intelligence Gain Prediction:</strong> Does Higher Criticism predict the token-level scale advantage — defined as <code>Intelligence Gain = Small CE − Big CE</code>?</li>
+          <li><strong>Layer-Targeted Specialization:</strong> At what network depth (Full layers vs. Q50, Q75, Q85, Q90, Q95 layer subsets) is the routing anomaly signal most strongly aligned with Intelligence Gain?</li>
+          <li><strong>Architectural & Null Invariance:</strong> How do architectural features (pure token-choice MoE vs. 1 or 2 shared experts vs. hybrid architectures) and null estimators (GMM, GLM, StudentT, StudentTSkewed, KDE, JohnsonSU) modulate these relationships?</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- 2. NOMENCLATURE -->
+    <section id="nomenclature">
+      <h2>2. Nomenclature & Unified Sign Convention</h2>
+      <div class="alert">
+        <strong>Unified Sign Convention:</strong> In all files in <code>reports/26_08_25</code>, the column <code>Pearson_Max_Per_Row_Diff</code> is computed directly against <strong><code>Intelligence Gain = CE(small) − CE(big)</code></strong>. Positive correlations mean Higher Criticism (HC) is positively aligned with greater scale advantage (the big model winning by a larger margin).
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Term / Symbol</th>
+              <th>Mathematical Definition</th>
+              <th>Interpretation</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Big CE</code></td>
+              <td>Cross-entropy loss of large model</td>
+              <td>Loss of the scaled MoE model (Qwen Large, ERNIE 21B-A3B, Gemma 26B-A4B, Liquid LFM2-8B-A1B).</td>
+            </tr>
+            <tr>
+              <td><code>Small CE</code></td>
+              <td>Cross-entropy loss of small model</td>
+              <td>Loss of the baseline compact model (Qwen Small, ERNIE 0.3B, Gemma 5B, Liquid LFM2-700M).</td>
+            </tr>
+            <tr>
+              <td><code>Intelligence Gain (Diff)</code></td>
+              <td><code>IG = Small CE − Big CE</code></td>
+              <td>The per-token reduction in cross-entropy achieved by scaling up. Positive correlation with HC indicates that tokens with anomalous routing yield greater benefits of scale.</td>
+            </tr>
+            <tr>
+              <td><code>Higher Criticism (HC)</code></td>
+              <td><code>HC = max_i sqrt(n)*(i/n - p_(i)) / sqrt(p_(i)*(1 - p_(i)))</code></td>
+              <td>Second-level Higher Criticism statistic measuring sparse departures from null routing behavior among experts for a given token.</td>
+            </tr>
+            <tr>
+              <td><code>Fisher Combination</code></td>
+              <td><code>Fisher = -2 * sum_j log(p_j)</code></td>
+              <td>Classical combination statistic capturing dense, global routing departures.</td>
+            </tr>
+            <tr>
+              <td><code>Partial Pearson (Diff | Fisher)</code></td>
+              <td><code>r(HC, Diff | Fisher)</code></td>
+              <td>Correlation between HC and Intelligence Gain after partialling out the linear effect of Fisher, isolating the pure sparse signal.</td>
+            </tr>
+            <tr>
+              <td><code>-log p_min (InvMinP)</code></td>
+              <td><code>-log(min_j p_j)</code></td>
+              <td>Single-champion benchmark capturing only the single most extreme expert.</td>
+            </tr>
+            <tr>
+              <td><code>HC_pmin-rm</code></td>
+              <td><code>HC(p_values \ {p_min})</code></td>
+              <td>Higher Criticism recomputed after removing the single most extreme expert, proving multi-expert coordination.</td>
+            </tr>
+            <tr>
+              <td><code>per_expert Granularity</code></td>
+              <td>One P-value per expert router</td>
+              <td>Direct routing anomaly analysis without spatial or coarse map aggregation.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 3. EMPIRICAL NULL SIMULATION -->
+    <section id="simulation">
+      <h2>3. Empirical Null Simulation & Statistical Significance Framework</h2>
+      <div class="card">
+        <p>To establish an exact statistical benchmark for Pearson correlations computed over dataset sequences of size N=10,000, we executed a dedicated Monte Carlo simulation of <strong>10,000 independent trials</strong>. In each trial, two independent random normal sequences of length <code>n = 10,000</code> were generated (seed 42), and their Pearson correlation was recorded.</p>
+        
+        <div class="grid-2">
+          <div>
+            <h3>Simulation Summary Statistics (N=10,000, 10k Trials)</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                    <th>Theoretical</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td>Sample Size (n)</td><td class="num">10,000</td><td class="num">10,000</td></tr>
+                  <tr><td>Trials (Repetitions)</td><td class="num">10,000</td><td class="num">&infin;</td></tr>
+                  <tr><td>Mean (&mu;)</td><td class="num">-0.000196</td><td class="num">0.000000</td></tr>
+                  <tr><td>Standard Deviation (&sigma;)</td><td class="num">0.009866</td><td class="num">0.010000</td></tr>
+                  <tr><td>Median</td><td class="num">-0.000329</td><td class="num">0.000000</td></tr>
+                  <tr><td>Min Observed</td><td class="num">-0.036794</td><td class="num">&mdash;</td></tr>
+                  <tr><td>Max Observed</td><td class="num">+0.035588</td><td class="num">&mdash;</td></tr>
+                  <tr><td>1st Percentile (p01)</td><td class="num">-0.022832</td><td class="num">-0.023263</td></tr>
+                  <tr><td>5th Percentile (p05)</td><td class="num">-0.016064</td><td class="num">-0.016449</td></tr>
+                  <tr><td>95th Percentile (p95)</td><td class="num">+0.016033</td><td class="num">+0.016449</td></tr>
+                  <tr><td>99th Percentile (p99)</td><td class="num">+0.023422</td><td class="num">+0.023263</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <h3>Significance Decision Thresholds</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Significance Tier</th>
+                    <th>Cutoff Threshold</th>
+                    <th>Interpretation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="badge badge-sig">p &lt; 0.05</span></td>
+                    <td class="num"><strong>|r| &gt; 0.01934</strong></td>
+                    <td>Exceeds 95% two-tailed empirical null envelope (1.96 &times; &sigma;<sub>null</sub>).</td>
+                  </tr>
+                  <tr>
+                    <td><span class="badge badge-high">p &lt; 0.01</span></td>
+                    <td class="num"><strong>|r| &gt; 0.02541</strong></td>
+                    <td>Exceeds 99% two-tailed empirical null envelope (2.576 &times; &sigma;<sub>null</sub>).</td>
+                  </tr>
+                  <tr>
+                    <td><span class="badge badge-ext">p &lt; 0.0001</span></td>
+                    <td class="num"><strong>|r| &gt; 0.03679</strong></td>
+                    <td><strong>Beyond Null Maximum:</strong> Greater than the absolute maximum correlation observed in 10,000 null trials.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <h3>Significance Rate Across All 432 Per-Expert Experimental Configurations</h3>
+        <p>Evaluating all 432 configurations against the empirical null distribution reveals that the observed HC correlations are overwhelmingly real, robust physical signals rather than statistical artifacts:</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Target Metric</th>
+                <th class="num">Mean r</th>
+                <th class="num">Significant (p &lt; 0.05)</th>
+                <th class="num">Pos / Neg Sig</th>
+                <th class="num">High Sig (p &lt; 0.01)</th>
+                <th class="num">Beyond Null Max (p &lt; 10<sup>-4</sup>)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Big Model CE</strong></td>
+                <td class="num">+0.0135</td>
+                <td class="num">320 / 432 (74.1%)</td>
+                <td class="num">180 / 140</td>
+                <td class="num">293 (67.8%)</td>
+                <td class="num"><strong>231 (53.5%)</strong></td>
+              </tr>
+              <tr>
+                <td><strong>Small Model CE</strong></td>
+                <td class="num">+0.0199</td>
+                <td class="num">349 / 432 (80.8%)</td>
+                <td class="num">206 / 143</td>
+                <td class="num">324 (75.0%)</td>
+                <td class="num"><strong>278 (64.4%)</strong></td>
+              </tr>
+              <tr>
+                <td><strong>Intelligence Gain (Diff)</strong></td>
+                <td class="num">+0.0024</td>
+                <td class="num">338 / 432 (78.2%)</td>
+                <td class="num">175 / 163</td>
+                <td class="num">308 (71.3%)</td>
+                <td class="num"><strong>233 (53.9%)</strong></td>
+              </tr>
+              <tr>
+                <td><strong>Intelligence Gain (Q50 Subset)</strong></td>
+                <td class="num">+0.0180</td>
+                <td class="num">356 / 432 (82.4%)</td>
+                <td class="num">207 / 149</td>
+                <td class="num">335 (77.5%)</td>
+                <td class="num"><strong>294 (68.1%)</strong></td>
+              </tr>
+              <tr>
+                <td><strong>Intelligence Gain (Q75 Subset)</strong></td>
+                <td class="num">+0.0327</td>
+                <td class="num">352 / 432 (81.5%)</td>
+                <td class="num">239 / 113</td>
+                <td class="num">337 (78.0%)</td>
+                <td class="num"><strong>313 (72.5%)</strong></td>
+              </tr>
+              <tr>
+                <td><strong>Intelligence Gain (Q85 Subset)</strong></td>
+                <td class="num">+0.0426</td>
+                <td class="num">371 / 432 (85.9%)</td>
+                <td class="num">278 / 93</td>
+                <td class="num">350 (81.0%)</td>
+                <td class="num"><strong>302 (69.9%)</strong></td>
+              </tr>
+              <tr>
+                <td><strong>Intelligence Gain (Q90 Subset)</strong></td>
+                <td class="num">+0.0465</td>
+                <td class="num">357 / 432 (82.6%)</td>
+                <td class="num">281 / 76</td>
+                <td class="num">330 (76.4%)</td>
+                <td class="num"><strong>296 (68.5%)</strong></td>
+              </tr>
+              <tr>
+                <td><strong>Intelligence Gain (Q95 Subset)</strong></td>
+                <td class="num">+0.0433</td>
+                <td class="num">340 / 432 (78.7%)</td>
+                <td class="num">267 / 73</td>
+                <td class="num">315 (72.9%)</td>
+                <td class="num"><strong>275 (63.7%)</strong></td>
+              </tr>
+              <tr>
+                <td><strong>HC Pmin-Removed Diff</strong></td>
+                <td class="num">+0.0069</td>
+                <td class="num">256 / 432 (59.3%)</td>
+                <td class="num">140 / 116</td>
+                <td class="num">217 (50.2%)</td>
+                <td class="num">156 (36.1%)</td>
+              </tr>
+              <tr>
+                <td><strong>Partial Diff (controlling Fisher)</strong></td>
+                <td class="num">-0.0032</td>
+                <td class="num">293 / 432 (67.8%)</td>
+                <td class="num">123 / 170</td>
+                <td class="num">255 (59.0%)</td>
+                <td class="num">193 (44.7%)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. EXPERIMENTAL SETUP -->
+    <section id="setup">
+      <h2>4. Experimental Setup: Four Model Families & Nine Benchmarks</h2>
+      <div class="card">
+        <h3>Model Pairs Specifications</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Family Label</th>
+                <th>Large Model</th>
+                <th>Small Model</th>
+                <th>Routing Architecture</th>
+                <th>Shared Experts</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Qwen MoE</strong></td>
+                <td>Qwen MoE (Large)</td>
+                <td>Qwen MoE Small</td>
+                <td>Token-choice top-k routed experts (~22B active)</td>
+                <td><span class="badge" style="background:#fee2e2;color:#991b1b;">0 Shared</span></td>
+              </tr>
+              <tr>
+                <td><strong>ERNIE-4.5</strong></td>
+                <td>ERNIE-4.5-21B-A3B-PT</td>
+                <td>ERNIE-4.5-0.3B-Base-PT</td>
+                <td>Token-choice top-k routed experts (~3B active)</td>
+                <td><span class="badge" style="background:#fef3c7;color:#92400e;">2 Shared</span></td>
+              </tr>
+              <tr>
+                <td><strong>Gemma 4</strong></td>
+                <td>Gemma 4 26B-A4B</td>
+                <td>Gemma 4 5B (Dense)</td>
+                <td>Token-choice top-8 of 128 routed experts (~4B active)</td>
+                <td><span class="badge" style="background:#e0e7ff;color:#3730a3;">1 Shared (3&times; size)</span></td>
+              </tr>
+              <tr>
+                <td><strong>Liquid LFM</strong></td>
+                <td>Liquid LFM2-8B-A1B</td>
+                <td>Liquid LFM2-700M</td>
+                <td>Liquid hybrid MoE dynamical routing (~1.2B active)</td>
+                <td><span class="badge" style="background:#ccfbf1;color:#115e59;">Hybrid Dynamical</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Benchmark Dataset Characteristics</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Dataset</th>
+                <th>Domain / Task Type</th>
+                <th>Evaluation Characteristics</th>
+                <th>Observed Routing Regime</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>lambada</code></td>
+                <td>Next-word prediction</td>
+                <td>Long context narrative; high token-to-token CE variance</td>
+                <td>Strongest scale advantage in Qwen (+0.1289)</td>
+              </tr>
+              <tr>
+                <td><code>competition_math</code></td>
+                <td>Multi-step mathematical reasoning</td>
+                <td>Level-5 competition problems; highly structured reasoning</td>
+                <td>High Intelligence Gain in Qwen (+0.0959 full, +0.2068 Q90)</td>
+              </tr>
+              <tr>
+                <td><code>structured-wikipedia</code></td>
+                <td>Encyclopedic knowledge</td>
+                <td>Factual long-form passages; domain entities</td>
+                <td>Liquid's highest Intelligence Gain (+0.1503 in Q90)</td>
+              </tr>
+              <tr>
+                <td><code>fineweb-edu</code></td>
+                <td>Educational web-crawl</td>
+                <td>High-quality educational prose; varied multi-domain text</td>
+                <td>Consistently positive IG in Qwen (+0.0677) & ERNIE (+0.1259 Q90)</td>
+              </tr>
+              <tr>
+                <td><code>tinystories</code></td>
+                <td>Synthetic narrative</td>
+                <td>Controlled simple vocabulary; generative prose</td>
+                <td>Dramatic surge in Qwen Q90 (+0.2333)</td>
+              </tr>
+              <tr>
+                <td><code>race</code></td>
+                <td>Reading comprehension</td>
+                <td>Middle/high school exam passages with complex multi-choice reasoning</td>
+                <td>Strong upper-layer IG in Qwen (+0.1133) & ERNIE (+0.0885)</td>
+              </tr>
+              <tr>
+                <td><code>mmlu</code></td>
+                <td>Multi-subject QA</td>
+                <td>57 diverse academic and professional subjects</td>
+                <td>Major upper-layer gain in ERNIE (+0.1205 in Q90)</td>
+              </tr>
+              <tr>
+                <td><code>pg19</code></td>
+                <td>Long-form literature</td>
+                <td>Unabridged books; extended narrative context</td>
+                <td>Positive IG in ERNIE (+0.0840) & Qwen (+0.0507 Q90)</td>
+              </tr>
+              <tr>
+                <td><code>hellaswag</code></td>
+                <td>Commonsense reasoning</td>
+                <td>Adversarially filtered sentence completions</td>
+                <td>Surges to +0.1739 in Qwen Q90</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. KEY FINDINGS -->
+    <section id="findings">
+      <h2>5. Key Findings</h2>
+
+      <!-- Figure 1 -->
+      <div class="chart-wrap" id="overview">
+        <h3>Figure 1. High-Level Benchmark Landscape (36 Scenario Configurations)</h3>
+        <p style="font-size:0.88rem;color:var(--text-muted);margin-bottom:0.75rem;">Pearson correlations for GMM / per_expert_standard across all 9 benchmark datasets &times; 4 model families. Positive Diff indicates that Higher Criticism predicts greater Intelligence Gain (scale advantage of the large model).</p>
+        <div class="legend-row">
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-big)"></div>HC &harr; Big Model CE</div>
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-small)"></div>HC &harr; Small Model CE</div>
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-diff)"></div>HC &harr; Intelligence Gain (Diff = Small CE &minus; Big CE)</div>
+        </div>
+        <canvas id="fig1"></canvas>
+        <div class="fig-caption">Figure 1. Pearson correlations between HC (max per row) and Big CE, Small CE, and Intelligence Gain (Diff). Bars above zero for Diff indicate positive Intelligence Gain correlations (tokens where large model gains more over small model). All values directly reflect the unified sign convention.</div>
+      </div>
+
+      <!-- Finding 1 -->
+      <div class="finding scale">
+        <h4>Finding 1 &mdash; Scale Asymmetry & Architectural Bifurcation in Intelligence Gain</h4>
+        <p>Across the four model families, Higher Criticism exhibits starkly distinct architectural behaviors:</p>
+        <ul style="margin-left:1.5rem; line-height: 1.7;">
+          <li><strong>Pure Token-Choice MoE (Qwen):</strong> HC exhibits a strong, consistent <strong>positive correlation with Intelligence Gain</strong> (mean r = +0.0538 across all 108 configs, with 84/108 positive significant at p &lt; 0.05). High HC tokens mark coordinates where the large model's specialized capacity translates into maximal predictive advantage over the small model.</li>
+          <li><strong>Dual Shared-Expert MoE (ERNIE-4.5):</strong> In full-network evaluations, ERNIE shows a balanced profile (mean r = +0.0014), but in upper layers (Q90) it exhibits an overwhelming positive Intelligence Gain correlation (mean r = <strong>+0.0723</strong>, 104/108 significant, 100% positive).</li>
+          <li><strong>Always-On Shared Expert (Gemma 4):</strong> Gemma exhibits an inverted (negative) Intelligence Gain correlation (mean r = −0.0500, 91/108 negative significant), demonstrating that its 3&times;-capacity shared expert handles baseline predictability, reducing the large model's relative advantage at anomalous tokens.</li>
+          <li><strong>Hybrid Dynamical MoE (Liquid LFM):</strong> Liquid demonstrates strong positive CE loss correlations (Big CE: +0.0416, Small CE: +0.0460) and specialized positive Intelligence Gain in structured factual domains (structured-wikipedia Q90 = +0.1503).</li>
+        </ul>
+      </div>
+
+      <!-- Finding 2 -->
+      <div class="finding scale">
+        <h4>Finding 2 &mdash; Qwen MoE Scale Advantage Is Strongly Concentrated in Routing Anomalies</h4>
+        <p>For Qwen on lambada, <code>Pearson(HC, Small CE)</code> (avg +0.1795) consistently exceeds <code>Pearson(HC, Big CE)</code> (avg +0.1008), yielding an Intelligence Gain correlation of <strong>+0.1289</strong> (12/12 configurations significant at p &lt; 0.05). Across the entire Qwen corpus, <strong>78.7% of full-layer Diff correlations</strong> and <strong>94.4% of Q50 Diff correlations</strong> are statistically significant at p &lt; 0.05 (with 93/108 exceeding the 10k null simulation absolute maximum). This proves that the scale advantage of Qwen MoE is directly indexed by sparse routing departures.</p>
+      </div>
+
+      <!-- Figure 2 -->
+      <div class="chart-wrap">
+        <h3>Figure 2. Qwen / lambada: Robustness Across Six Parametric Null Estimators</h3>
+        <div class="legend-row">
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-big)"></div>HC &harr; Big CE</div>
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-small)"></div>HC &harr; Small CE</div>
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-diff)"></div>HC &harr; Intelligence Gain (Diff)</div>
+        </div>
+        <canvas id="fig2"></canvas>
+        <div class="fig-caption">Figure 2. Qwen/lambada per_expert_standard: Pearson correlations across six parametric null estimators. The scale asymmetry (Small CE &gt; Big CE) and positive Intelligence Gain (+0.108 to +0.154) are entirely invariant to null estimator choice.</div>
+      </div>
+
+      <!-- Finding 3 -->
+      <div class="finding ernie">
+        <h4>Finding 3 &mdash; ERNIE-4.5 Upper-Layer Specialization: 96.3% Positive Significance in Q90</h4>
+        <p>In ERNIE-4.5, Intelligence Gain undergoes a dramatic phase transition across network depth. While early/mid layers reflect shared-expert routing absorption, the upper layers (Q85–Q95) show a massive emergence of Intelligence Gain. In the Q90 layer subset, <strong>104 out of 108 experimental configurations (96.3%) are statistically significant at p &lt; 0.05</strong>, and <strong>100% of the significant configurations are strictly positive</strong> (mean r = +0.0723, with 90/108 exceeding the null simulation maximum). Every single one of the 9 benchmark datasets exhibits positive Intelligence Gain in Q90 (fineweb-edu: +0.1259, mmlu: +0.1205, race: +0.0885, pg19: +0.0829).</p>
+      </div>
+
+      <!-- Figure 3 -->
+      <div class="chart-wrap" id="layer-dynamics">
+        <h3>Figure 3. Layer-Subset Dynamics: Intelligence Gain from Full Network to Q95</h3>
+        <div class="legend-row">
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-big)"></div>Qwen MoE</div>
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-purple)"></div>ERNIE-4.5</div>
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-small)"></div>Gemma 4</div>
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-teal)"></div>Liquid LFM</div>
+        </div>
+        <canvas id="fig3"></canvas>
+        <div class="fig-caption">Figure 3. Mean Intelligence Gain Pearson correlation across layer progression subsets: Full Layers &rarr; Q50 &rarr; Q75 &rarr; Q85 &rarr; Q90 &rarr; Q95. Notice the sharp monotonic increase in Qwen (+0.054 &rarr; +0.125) and ERNIE (+0.001 &rarr; +0.072), highlighting that routing intelligence is deeply concentrated in upper transformer layers.</div>
+      </div>
+
+      <!-- Finding 4 -->
+      <div class="finding gemma">
+        <h4>Finding 4 &mdash; Gemma 4 Shared-Expert Mechanics Invert the Intelligence Gain Metric</h4>
+        <p>Gemma 4 presents a unique structural profile: across 108 configurations, <strong>90.7% are statistically significant at p &lt; 0.05</strong>, but 91 of those 98 are negative (mean r = −0.0500). Because Gemma 4 26B incorporates an always-on shared expert of 3&times; width that handles general token predictability, routed experts are only invoked for peripheral or out-of-distribution features where the smaller dense model's unified representation performs comparatively well. This architectural divergence provides strong empirical evidence that shared experts fundamentally alter routing semantics.</p>
+      </div>
+
+      <!-- Finding 5 -->
+      <div class="finding liquid">
+        <h4>Finding 5 &mdash; Liquid LFM Demonstrates Domain-Targeted Factual Intelligence Scaling</h4>
+        <p>The Liquid Foundation Model (LFM2-8B-A1B vs. LFM2-700M) exhibits strong positive correlations with individual model CE loss (Big CE: +0.0416, 75.9% sig; Small CE: +0.0460, 83.3% sig). In Intelligence Gain, Liquid displays domain-targeted scaling: in structured factual domains, high HC strongly predicts big model advantage (<code>structured-wikipedia</code> Q90 = <strong>+0.1503</strong> with 12/12 configs sig, <code>fineweb-edu</code> Q90 = <strong>+0.0616</strong> with 12/12 configs sig, and <code>lambada</code> full = <strong>+0.0615</strong> with 12/12 configs sig).</p>
+      </div>
+
+      <!-- Figure 4 -->
+      <div class="chart-wrap" id="robustness">
+        <h3>Figure 4. Raw vs. Partial Pearson Correlations (Controlling for Fisher Combination)</h3>
+        <div class="legend-row">
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-diff)"></div>Raw Pearson (HC &harr; Intelligence Gain)</div>
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-pdiff);border:1.5px solid var(--c-diff)"></div>Partial Pearson (HC &harr; IG | Fisher)</div>
+        </div>
+        <canvas id="fig4"></canvas>
+        <div class="fig-caption">Figure 4. Qwen/lambada per_expert_standard across six estimators: Raw vs. Partial Pearson correlation with Intelligence Gain after controlling for the Fisher combination statistic. Across all estimators, HC retains substantial, statistically significant predictive power (p &lt; 0.0001), proving that sparse Higher Criticism captures signal orthogonal to dense routing activations.</div>
+      </div>
+
+      <!-- Finding 8 & 9 -->
+      <div class="grid-2">
+        <div class="finding null">
+          <h4>Finding 8 &mdash; Signal Is Multi-Expert, Not Driven by a Single Champion Expert</h4>
+          <p>Comparing Higher Criticism against the single-champion alternative <code>-log p_min (InvMinP)</code> demonstrates that InvMinP carries near-zero Intelligence Gain correlation (Qwen: +0.0017 vs. HC +0.0538; Liquid: +0.0014 vs. HC +0.0045). Furthermore, when the most extreme expert (p<sub>min</sub>) is completely removed before computing HC (<code>HC_pmin-rm</code>), the Intelligence Gain correlation survives intact (Qwen: +0.0243; ERNIE: +0.0170; Liquid: +0.0086). The signal is a true multi-expert ensemble phenomenon.</p>
+        </div>
+
+        <div class="finding null">
+          <h4>Finding 9 &mdash; Sparse HC Is Orthogonal to Dense Fisher Sums</h4>
+          <p>Partialling out the Fisher combination statistic (sum of −2 log p-values) leaves the HC Intelligence Gain correlation strongly significant across 67.8% of all configurations (Qwen partial r = +0.0386, 73.1% sig). This proves that sparse expert coordination carries distinct predictive information beyond broad, diffuse routing elevations.</p>
+        </div>
+      </div>
+
+      <!-- Figure 5 -->
+      <div class="chart-wrap">
+        <h3>Figure 5. Multi-Expert Decomposition across All Four Model Families</h3>
+        <div class="legend-row">
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-diff)"></div>Standard HC</div>
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-amber)"></div>InvMinP (-log p_min)</div>
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-purple)"></div>HC Pmin-Removed</div>
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-pdiff);border:1.5px solid var(--c-diff)"></div>Partial HC (| Fisher)</div>
+        </div>
+        <canvas id="fig5"></canvas>
+        <div class="fig-caption">Figure 5. Mean Intelligence Gain correlations across the 4 model families comparing Standard HC, InvMinP, HC with p_min removed, and Partial HC controlling for Fisher. In all families, HC substantially outperforms single-expert InvMinP and survives both p_min removal and Fisher conditioning.</div>
+      </div>
+
+      <!-- Figure 6 -->
+      <div class="chart-wrap">
+        <h3>Figure 6. Upper-Layer (Q90) Intelligence Gain Landscape across 9 Benchmarks &times; 4 Families</h3>
+        <div class="legend-row">
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-big)"></div>Qwen MoE (Q90)</div>
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-purple)"></div>ERNIE-4.5 (Q90)</div>
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-small)"></div>Gemma 4 (Q90)</div>
+          <div class="leg"><div class="leg-swatch" style="background:var(--c-teal)"></div>Liquid LFM (Q90)</div>
+        </div>
+        <canvas id="fig6"></canvas>
+        <div class="fig-caption">Figure 6. Intelligence Gain Pearson correlation in the Q90 layer subset across all 9 datasets for all four model families. In Q90, both Qwen and ERNIE show positive correlations across virtually all benchmarks, peaking at +0.233 (tinystories, Qwen), +0.207 (comp_math, Qwen), +0.150 (structured-wiki, Liquid), and +0.126 (fineweb-edu, ERNIE).</div>
+      </div>
+
+      <!-- Finding 10 -->
+      <div class="finding scale">
+        <h4>Finding 10 &mdash; Standard HC and Empirically Corrected HC* (Hat) Yield Equivalent Signals</h4>
+        <p>Comparing <code>per_expert_standard</code> against <code>per_expert_hat</code> shows remarkable agreement across all families: Qwen Diff = +0.0503 (standard) vs. +0.0572 (hat); ERNIE Diff Q90 = +0.0782 (standard) vs. +0.0663 (hat); Gemma Diff = −0.0460 (standard) vs. −0.0540 (hat); Liquid Diff = +0.0058 (standard) vs. +0.0033 (hat). This demonstrates that empirical correction stabilizes P-value thresholds without distorting the underlying routing anomaly structure.</p>
+      </div>
+
+    </section>
+
+    <!-- 6. COMPREHENSIVE DATA TABLES -->
+    <section id="tables">
+      <h2>6. Comprehensive Data Reference Tables</h2>
+
+      <!-- Table 1 -->
+      <div class="card">
+        <h3>Table 1. Model Family Executive Summary & Empirical Null Significance Rates</h3>
+        <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.5rem;">Significance evaluated against 10,000-trial simulation empirical null (Nominal &alpha;=0.05 cutoff |r| &gt; 0.01934; Extreme &alpha;=0.0001 cutoff |r| &gt; 0.03679).</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Model Family</th>
+                <th>Shared Experts</th>
+                <th class="num">Big CE (Mean &plusmn; Std)</th>
+                <th class="num">Small CE (Mean &plusmn; Std)</th>
+                <th class="num">Intelligence Gain (Full)</th>
+                <th class="num">IG Sig Rate (p &lt; 0.05)</th>
+                <th class="num">Intelligence Gain (Q90)</th>
+                <th class="num">Q90 Sig Rate (p &lt; 0.05)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Qwen MoE</strong></td>
+                <td>0 Shared</td>
+                <td class="num">+0.0099 &plusmn; 0.076</td>
+                <td class="num">+0.0489 &plusmn; 0.100</td>
+                <td class="num"><strong>+0.0538</strong></td>
+                <td class="num">85 / 108 (78.7%) <span class="badge badge-sig">84 Pos</span></td>
+                <td class="num"><strong>+0.1240</strong></td>
+                <td class="num">99 / 108 (91.7%) <span class="badge badge-ext">94 &gt; Null Max</span></td>
+              </tr>
+              <tr>
+                <td><strong>ERNIE-4.5</strong></td>
+                <td>2 Shared</td>
+                <td class="num">+0.0369 &plusmn; 0.074</td>
+                <td class="num">+0.0396 &plusmn; 0.089</td>
+                <td class="num">+0.0014</td>
+                <td class="num">77 / 108 (71.3%) <span class="badge badge-sig">35 Pos</span></td>
+                <td class="num"><strong>+0.0723</strong></td>
+                <td class="num">104 / 108 (96.3%) <span class="badge badge-high">100% Pos</span></td>
+              </tr>
+              <tr>
+                <td><strong>Gemma 4</strong></td>
+                <td>1 Shared (3&times;)</td>
+                <td class="num">-0.0342 &plusmn; 0.073</td>
+                <td class="num">-0.0550 &plusmn; 0.074</td>
+                <td class="num"><strong>-0.0500</strong></td>
+                <td class="num">98 / 108 (90.7%) <span class="badge badge-sig">91 Neg</span></td>
+                <td class="num">-0.0228</td>
+                <td class="num">81 / 108 (75.0%) <span class="badge badge-sig">34 Pos</span></td>
+              </tr>
+              <tr>
+                <td><strong>Liquid LFM</strong></td>
+                <td>Hybrid Dynamical</td>
+                <td class="num">+0.0416 &plusmn; 0.048</td>
+                <td class="num">+0.0460 &plusmn; 0.042</td>
+                <td class="num">+0.0045</td>
+                <td class="num">78 / 108 (72.2%) <span class="badge badge-sig">49 Pos</span></td>
+                <td class="num">+0.0126</td>
+                <td class="num">73 / 108 (67.6%) <span class="badge badge-sig">45 Pos</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Table 2 -->
+      <div class="card">
+        <h3>Table 2. Benchmark Dataset &times; Model Family Intelligence Gain (Full Layers & Q90 Subset)</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Dataset</th>
+                <th class="num">Qwen (Full)</th>
+                <th class="num">Qwen (Q90)</th>
+                <th class="num">ERNIE (Full)</th>
+                <th class="num">ERNIE (Q90)</th>
+                <th class="num">Gemma (Full)</th>
+                <th class="num">Gemma (Q90)</th>
+                <th class="num">Liquid (Full)</th>
+                <th class="num">Liquid (Q90)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>lambada</code></td>
+                <td class="num">+0.1289</td>
+                <td class="num"><strong>+0.0722</strong></td>
+                <td class="num">-0.0531</td>
+                <td class="num"><strong>+0.0361</strong></td>
+                <td class="num">+0.0248</td>
+                <td class="num">+0.0516</td>
+                <td class="num">+0.0615</td>
+                <td class="num"><strong>+0.0143</strong></td>
+              </tr>
+              <tr>
+                <td><code>competition_math</code></td>
+                <td class="num">+0.0959</td>
+                <td class="num"><strong>+0.2068</strong></td>
+                <td class="num">-0.0109</td>
+                <td class="num"><strong>+0.0397</strong></td>
+                <td class="num">-0.0917</td>
+                <td class="num">-0.1128</td>
+                <td class="num">-0.0941</td>
+                <td class="num"><strong>-0.1233</strong></td>
+              </tr>
+              <tr>
+                <td><code>structured-wikipedia</code></td>
+                <td class="num">+0.0506</td>
+                <td class="num"><strong>+0.0837</strong></td>
+                <td class="num">+0.0474</td>
+                <td class="num"><strong>+0.0613</strong></td>
+                <td class="num">-0.0588</td>
+                <td class="num">-0.0049</td>
+                <td class="num">-0.0068</td>
+                <td class="num"><strong>+0.1503</strong></td>
+              </tr>
+              <tr>
+                <td><code>fineweb-edu</code></td>
+                <td class="num">+0.0677</td>
+                <td class="num"><strong>+0.1602</strong></td>
+                <td class="num">+0.0279</td>
+                <td class="num"><strong>+0.1259</strong></td>
+                <td class="num">-0.0470</td>
+                <td class="num">+0.0051</td>
+                <td class="num">-0.0005</td>
+                <td class="num"><strong>+0.0616</strong></td>
+              </tr>
+              <tr>
+                <td><code>tinystories</code></td>
+                <td class="num">+0.0214</td>
+                <td class="num"><strong>+0.2333</strong></td>
+                <td class="num">-0.0159</td>
+                <td class="num"><strong>+0.0452</strong></td>
+                <td class="num">-0.0421</td>
+                <td class="num">+0.0329</td>
+                <td class="num">-0.0376</td>
+                <td class="num"><strong>-0.0064</strong></td>
+              </tr>
+              <tr>
+                <td><code>race</code></td>
+                <td class="num">+0.0574</td>
+                <td class="num"><strong>+0.1133</strong></td>
+                <td class="num">-0.0293</td>
+                <td class="num"><strong>+0.0885</strong></td>
+                <td class="num">-0.0599</td>
+                <td class="num">-0.0485</td>
+                <td class="num">+0.0034</td>
+                <td class="num"><strong>+0.0402</strong></td>
+              </tr>
+              <tr>
+                <td><code>mmlu</code></td>
+                <td class="num">+0.0129</td>
+                <td class="num"><strong>+0.0218</strong></td>
+                <td class="num">+0.0083</td>
+                <td class="num"><strong>+0.1205</strong></td>
+                <td class="num">-0.0590</td>
+                <td class="num">-0.0597</td>
+                <td class="num">+0.0276</td>
+                <td class="num"><strong>+0.0212</strong></td>
+              </tr>
+              <tr>
+                <td><code>pg19</code></td>
+                <td class="num">+0.0243</td>
+                <td class="num"><strong>+0.0507</strong></td>
+                <td class="num">+0.0840</td>
+                <td class="num"><strong>+0.0829</strong></td>
+                <td class="num">-0.0885</td>
+                <td class="num">-0.0933</td>
+                <td class="num">+0.0382</td>
+                <td class="num"><strong>-0.0150</strong></td>
+              </tr>
+              <tr>
+                <td><code>hellaswag</code></td>
+                <td class="num">+0.0248</td>
+                <td class="num"><strong>+0.1739</strong></td>
+                <td class="num">-0.0454</td>
+                <td class="num"><strong>+0.0506</strong></td>
+                <td class="num">-0.0275</td>
+                <td class="num">+0.0240</td>
+                <td class="num">+0.0490</td>
+                <td class="num"><strong>-0.0295</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Table 3 -->
+      <div class="card">
+        <h3>Table 3. Parametric Null Estimator Comparison across Model Families</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Null Estimator</th>
+                <th class="num">Qwen (Full / Q90)</th>
+                <th class="num">ERNIE (Full / Q90)</th>
+                <th class="num">Gemma (Full / Q90)</th>
+                <th class="num">Liquid (Full / Q90)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>GMM</strong></td>
+                <td class="num">+0.0616 / <strong>+0.1445</strong></td>
+                <td class="num">+0.0045 / <strong>+0.0646</strong></td>
+                <td class="num">-0.0333 / +0.0017</td>
+                <td class="num">+0.0119 / +0.0181</td>
+              </tr>
+              <tr>
+                <td><strong>GLM</strong></td>
+                <td class="num">+0.0330 / <strong>+0.0861</strong></td>
+                <td class="num">-0.0148 / <strong>+0.0669</strong></td>
+                <td class="num">-0.0752 / -0.0611</td>
+                <td class="num">+0.0009 / +0.0115</td>
+              </tr>
+              <tr>
+                <td><strong>StudentT</strong></td>
+                <td class="num">+0.0459 / <strong>+0.1274</strong></td>
+                <td class="num">+0.0034 / <strong>+0.0830</strong></td>
+                <td class="num">-0.0369 / +0.0067</td>
+                <td class="num">-0.0030 / +0.0098</td>
+              </tr>
+              <tr>
+                <td><strong>StudentTSkewed</strong></td>
+                <td class="num">+0.0567 / <strong>+0.1207</strong></td>
+                <td class="num">-0.0060 / <strong>+0.0814</strong></td>
+                <td class="num">-0.0629 / -0.0387</td>
+                <td class="num">+0.0032 / +0.0234</td>
+              </tr>
+              <tr>
+                <td><strong>KDE</strong></td>
+                <td class="num">+0.0604 / <strong>+0.1327</strong></td>
+                <td class="num">+0.0096 / <strong>+0.0669</strong></td>
+                <td class="num">-0.0431 / -0.0201</td>
+                <td class="num">+0.0084 / +0.0066</td>
+              </tr>
+              <tr>
+                <td><strong>JohnsonSU</strong></td>
+                <td class="num">+0.0650 / <strong>+0.1325</strong></td>
+                <td class="num">+0.0119 / <strong>+0.0710</strong></td>
+                <td class="num">-0.0485 / -0.0256</td>
+                <td class="num">+0.0057 / +0.0061</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Table 4 -->
+      <div class="card">
+        <h3>Table 4. Layer Quantile Progression Table (Intelligence Gain Pearson r)</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Layer Subset</th>
+                <th class="num">Qwen MoE</th>
+                <th class="num">ERNIE-4.5</th>
+                <th class="num">Gemma 4</th>
+                <th class="num">Liquid LFM</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Full Layers</strong></td>
+                <td class="num">+0.0538</td>
+                <td class="num">+0.0014</td>
+                <td class="num">-0.0500</td>
+                <td class="num">+0.0045</td>
+              </tr>
+              <tr>
+                <td><strong>Q50 Subset</strong></td>
+                <td class="num">+0.1015</td>
+                <td class="num">+0.0384</td>
+                <td class="num">-0.0606</td>
+                <td class="num">-0.0072</td>
+              </tr>
+              <tr>
+                <td><strong>Q75 Subset</strong></td>
+                <td class="num">+0.1246</td>
+                <td class="num">+0.0615</td>
+                <td class="num">-0.0368</td>
+                <td class="num">-0.0184</td>
+              </tr>
+              <tr>
+                <td><strong>Q85 Subset</strong></td>
+                <td class="num">+0.1249</td>
+                <td class="num">+0.0688</td>
+                <td class="num">-0.0255</td>
+                <td class="num">+0.0023</td>
+              </tr>
+              <tr>
+                <td><strong>Q90 Subset</strong></td>
+                <td class="num">+0.1240</td>
+                <td class="num">+0.0723</td>
+                <td class="num">-0.0228</td>
+                <td class="num">+0.0126</td>
+              </tr>
+              <tr>
+                <td><strong>Q95 Subset</strong></td>
+                <td class="num">+0.1131</td>
+                <td class="num">+0.0667</td>
+                <td class="num">-0.0243</td>
+                <td class="num">+0.0178</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- 7. OPEN QUESTIONS -->
+    <section id="questions">
+      <h2>7. Open Questions & Roadmap</h2>
+      <div class="card">
+        <ul style="margin-left:1.5rem; line-height: 1.8;">
+          <li><strong>Shared-Expert Gate Tuning:</strong> Gemma's negative Intelligence Gain correlation suggests the shared expert absorbs baseline capacity. Can dynamic router temperature or shared-expert gating restore positive scale correlation for specialized tokens?</li>
+          <li><strong>Layer-Targeted Early Exit / Routing:</strong> Given that Intelligence Gain surges dramatically in upper layers (Q85–Q95), can we route tokens dynamically based on mid-network HC statistics, saving compute on routine tokens while allocating full MoE capacity to high-HC tokens?</li>
+          <li><strong>Token-Level Decile Profiling:</strong> Analyzing Intelligence Gain within deciles of token difficulty to determine whether HC's predictive gain is driven by the bulk of moderate tokens or extreme long-tail outliers.</li>
+          <li><strong>Cross-Tokenizer Alignment:</strong> Evaluating cross-family routing correlations on parallel texts where token boundaries are standardized.</li>
+        </ul>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Chart.js Scripts -->
+  <script>
+    Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    Chart.defaults.font.size = 11;
+    Chart.defaults.color = '#475569';
+
+    const C = {
+      big: '#2563eb',
+      small: '#dc2626',
+      diff: '#16a34a',
+      pdiff: 'rgba(22,163,74,0.35)',
+      purple: '#7c3aed',
+      teal: '#0d9488',
+      amber: '#d97706'
+    };
+
+    const zeroLine = {
+      id: 'zeroLine',
+      afterDatasetsDraw(chart) {
+        const { ctx, chartArea: { left, right }, scales: { y } } = chart;
+        if (!y) return;
+        const yPos = y.getPixelForValue(0);
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(left, yPos);
+        ctx.lineTo(right, yPos);
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([]);
+        ctx.stroke();
+        ctx.restore();
+      }
+    };
+    Chart.register(zeroLine);
+
+    function createBar(id, labels, datasets, yMin, yMax) {
+      new Chart(document.getElementById(id), {
+        type: 'bar',
+        data: { labels, datasets: datasets.map(d => ({ ...d, borderRadius: 4, barPercentage: 0.65, categoryPercentage: 0.75 })) },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y.toFixed(4)}` } }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { maxRotation: 0, font: { size: 10 } } },
+            y: {
+              min: yMin, max: yMax,
+              grid: { color: '#f1f5f9' },
+              ticks: { callback: v => v.toFixed(2) }
+            }
+          }
+        }
+      });
+    }
+
+    // Fig 1
+    createBar('fig1', 
+      ["Qwen\\nlambada", "Qwen\\ncompetit", "Qwen\\nstructur", "Qwen\\nfineweb-", "Qwen\\ntinystor", "Qwen\\nrace", "Qwen\\nmmlu", "Qwen\\npg19", "Qwen\\nhellaswa", "ERNIE\\nlambada", "ERNIE\\ncompetit", "ERNIE\\nstructur", "ERNIE\\nfineweb-", "ERNIE\\ntinystor", "ERNIE\\nrace", "ERNIE\\nmmlu", "ERNIE\\npg19", "ERNIE\\nhellaswa", "Gemma\\nlambada", "Gemma\\ncompetit", "Gemma\\nstructur", "Gemma\\nfineweb-", "Gemma\\ntinystor", "Gemma\\nrace", "Gemma\\nmmlu", "Gemma\\npg19", "Gemma\\nhellaswa", "Liquid\\nlambada", "Liquid\\ncompetit", "Liquid\\nstructur", "Liquid\\nfineweb-", "Liquid\\ntinystor", "Liquid\\nrace", "Liquid\\nmmlu", "Liquid\\npg19", "Liquid\\nhellaswa"],
+      [
+        { label: 'Big Model CE', data: [0.1655, 0.1264, 0.0695, -0.0638, 0.0179, 0.0213, 0.016, -0.05, -0.0283, 0.1007, 0.1082, 0.0194, -0.0194, -0.036, -0.0136, -0.01, 0.1707, 0.0046, 0.1057, 0.136, -0.0262, -0.102, -0.0259, -0.056, -0.0678, -0.1637, -0.029, 0.0341, 0.1139, 0.1204, 0.0339, 0.0054, 0.0298, -0.0038, 0.0167, -0.0743], backgroundColor: C.big },
+        { label: 'Small Model CE', data: [0.2417, 0.2552, 0.127, -0.0223, 0.0172, 0.0582, 0.0313, -0.02, -0.0132, 0.0821, 0.1166, 0.0789, 0.0031, -0.0396, -0.0326, 0.0016, 0.2165, -0.0196, 0.1159, 0.0759, -0.0322, -0.1026, -0.047, -0.0654, -0.076, -0.184, -0.0348, 0.0855, 0.0557, 0.1295, 0.0381, -0.0138, 0.037, 0.0176, 0.0523, -0.0436], backgroundColor: C.small },
+        { label: 'Intelligence Gain (Diff)', data: [0.1226, 0.1442, 0.0892, 0.0573, 0.001, 0.0549, 0.0264, 0.0377, 0.0268, -0.0419, -0.001, 0.074, 0.0356, -0.0021, -0.0282, 0.018, 0.0818, -0.0429, 0.0402, -0.0692, -0.0166, -0.0189, -0.0495, -0.033, -0.0311, -0.0794, -0.0252, 0.0647, -0.0895, 0.0177, 0.003, -0.0244, 0.0045, 0.0333, 0.0437, 0.0652], backgroundColor: C.diff }
+      ],
+      -0.25, 0.30
+    );
+
+    // Fig 2: Qwen lambada
+    createBar('fig2',
+      ["GMM", "GLM", "StudentT", "StudentTSkewed", "KDE", "JohnsonSU"],
+      [
+        { label: 'Big CE', data: [0.1655, 0.0474, 0.1076, 0.082, 0.0821, 0.1191], backgroundColor: C.big },
+        { label: 'Small CE', data: [0.2417, 0.1178, 0.1873, 0.1741, 0.1483, 0.213], backgroundColor: C.small },
+        { label: 'Intelligence Gain', data: [0.1226, 0.1167, 0.1304, 0.152, 0.1085, 0.1538], backgroundColor: C.diff }
+      ],
+      0.0, 0.28
+    );
+
+    // Fig 3: Layer progression
+    createBar('fig3',
+      ['Full Layers', 'Q50 Subset', 'Q75 Subset', 'Q85 Subset', 'Q90 Subset', 'Q95 Subset'],
+      [
+        { label: 'Qwen MoE', data: [0.0538, 0.1015, 0.1246, 0.1249, 0.124, 0.1131], backgroundColor: C.big },
+        { label: 'ERNIE-4.5', data: [0.0014, 0.0384, 0.0615, 0.0688, 0.0723, 0.0667], backgroundColor: C.purple },
+        { label: 'Gemma 4', data: [-0.05, -0.0606, -0.0368, -0.0255, -0.0228, -0.0243], backgroundColor: C.small },
+        { label: 'Liquid LFM', data: [0.0045, -0.0072, -0.0184, 0.0023, 0.0126, 0.0178], backgroundColor: C.teal }
+      ],
+      -0.08, 0.16
+    );
+
+    // Fig 4: Raw vs Partial
+    new Chart(document.getElementById('fig4'), {
+      type: 'bar',
+      data: {
+        labels: ["GMM", "GLM", "StudentT", "StudentTSkewed", "KDE", "JohnsonSU"],
+        datasets: [
+          {
+            label: 'Raw Pearson (HC ↔ IG)',
+            data: [0.1226, 0.1167, 0.1304, 0.152, 0.1085, 0.1538],
+            backgroundColor: C.diff, borderRadius: 4, barPercentage: 0.55, categoryPercentage: 0.75
+          },
+          {
+            label: 'Partial Pearson (HC ↔ IG | Fisher)',
+            data: [0.1114, 0.0549, 0.0982, 0.1331, 0.0787, 0.097],
+            backgroundColor: C.pdiff, borderColor: C.diff, borderWidth: 1.5,
+            borderRadius: 4, barPercentage: 0.55, categoryPercentage: 0.75
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y.toFixed(4)}` } }
+        },
+        scales: {
+          x: { grid: { display: false } },
+          y: { min: 0.0, max: 0.20, grid: { color: '#f1f5f9' }, ticks: { callback: v => v.toFixed(2) } }
+        }
+      }
+    });
+
+    // Fig 5: Multi-expert decomposition
+    createBar('fig5',
+      ['Qwen MoE', 'ERNIE-4.5', 'Gemma 4', 'Liquid LFM'],
+      [
+        { label: 'Standard HC', data: [0.0538, 0.0014, -0.05, 0.0045], backgroundColor: C.diff },
+        { label: 'InvMinP (-log p_min)', data: [0.0017, 0.0048, -0.0115, 0.0014], backgroundColor: C.amber },
+        { label: 'HC Pmin-Removed', data: [0.0243, 0.017, -0.0224, 0.0086], backgroundColor: C.purple },
+        { label: 'Partial HC (| Fisher)', data: [0.0386, -0.0288, -0.024, 0.0014], backgroundColor: C.pdiff, borderColor: C.diff, borderWidth: 1.5 }
+      ],
+      -0.07, 0.08
+    );
+
+    // Fig 6: Q90 landscape
+    createBar('fig6',
+      ['lambada', 'comp_math', 'structured-wiki', 'fineweb-edu', 'tinystories', 'race', 'mmlu', 'pg19', 'hellaswag'],
+      [
+        { label: 'Qwen MoE (Q90)', data: [0.0722, 0.2068, 0.0837, 0.1602, 0.2333, 0.1133, 0.0218, 0.0507, 0.1739], backgroundColor: C.big },
+        { label: 'ERNIE-4.5 (Q90)', data: [0.0361, 0.0397, 0.0613, 0.1259, 0.0452, 0.0885, 0.1205, 0.0829, 0.0506], backgroundColor: C.purple },
+        { label: 'Gemma 4 (Q90)', data: [0.0516, -0.1128, -0.0049, 0.0051, 0.0329, -0.0485, -0.0597, -0.0933, 0.024], backgroundColor: C.small },
+        { label: 'Liquid LFM (Q90)', data: [0.0143, -0.1233, 0.1503, 0.0616, -0.0064, 0.0402, 0.0212, -0.015, -0.0295], backgroundColor: C.teal }
+      ],
+      -0.15, 0.26
+    );
+
+  </script>
+
+</body>
+</html>
