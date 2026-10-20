@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HC-MoE Work Summary</title><style>/* --------------------------------------------------------------------------
+   Palette. Dark is the default; light stays available for continuity with the
+   pre-v6 reports in the series (Report(theme="light") stamps data-theme).
+   Every colour below is a variable, so the two blocks are the only place a
+   theme is defined -- no component rule hardcodes a colour.
+   -------------------------------------------------------------------------- */
+:root, :root[data-theme="dark"] {
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      --bg: #0b1120;
+      --surface: #151d2e;
+      --surface-alt: #1c2739;
+      --border: #2a3750;
+      --border-focus: #3b4c6b;
+      --text: #e6edf6;
+      --heading: #f1f5f9;
+      --body-text: #c7d2e0;
+      --text-muted: #93a3b8;
+      --nav-bg: rgba(11, 17, 32, 0.92);
+      --header-a: #1c2941;
+      --header-b: #111a2c;
+      --row-hover: rgba(255, 255, 255, 0.035);
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+      --shadow-lg: 0 14px 30px -12px rgba(0, 0, 0, 0.7);
+      --code-bg: #1c2739;
+
+      /* Signal colours, brightened so they carry on a dark ground.
+         Green/red keep the series convention for positive/negative r. */
+      --c-big: #60a5fa;
+      --c-small: #f87171;
+      --c-diff: #4ade80;
+      --c-pdiff: rgba(74, 222, 128, 0.35);
+      --c-purple: #a78bfa;
+      --c-amber: #fbbf24;
+      --c-teal: #2dd4bf;
+      --c-slate: #94a3b8;
+      --c-null: #64748b;
+
+      --badge-sig-bg: rgba(74, 222, 128, 0.16);
+      --badge-sig-fg: #86efac;
+      --badge-high-bg: rgba(74, 222, 128, 0.28);
+      --badge-high-fg: #bbf7d0;
+      --badge-ext-bg: rgba(96, 165, 250, 0.28);
+      --badge-ext-fg: #bfdbfe;
+
+      --caveat-bg: rgba(251, 191, 36, 0.10);
+      --caveat-border: rgba(251, 191, 36, 0.45);
+      --caveat-text: #fde68a;
+      --caveat-strong: #fcd34d;
+      --alert-bg: rgba(96, 165, 250, 0.10);
+      --alert-border: rgba(96, 165, 250, 0.35);
+      --alert-text: #bfdbfe;
+      --alert-strong: #dbeafe;
+
+      --tier-a-bg: #22c55e; --tier-a-fg: #052e16;
+      --tier-b-bg: #f59e0b; --tier-b-fg: #451a03;
+      --tier-c-bg: #64748b; --tier-c-fg: #f8fafc;
+
+      /* Read by the chart bootstrap for Chart.js global defaults. */
+      --chart-text: #93a3b8;
+      --chart-grid: rgba(148, 163, 184, 0.16);
+    }
+
+:root[data-theme="light"] {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-alt: #f1f5f9;
+      --border: #e2e8f0;
+      --border-focus: #cbd5e1;
+      --text: #0f172a;
+      --heading: #1e293b;
+      --body-text: #334155;
+      --text-muted: #64748b;
+      --nav-bg: rgba(255, 255, 255, 0.95);
+      --header-a: #1e293b;
+      --header-b: #0f172a;
+      --row-hover: #f8fafc;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+      --code-bg: #f1f5f9;
+
+      --c-big: #2563eb;
+      --c-small: #dc2626;
+      --c-diff: #16a34a;
+      --c-pdiff: rgba(22, 163, 74, 0.35);
+      --c-purple: #7c3aed;
+      --c-amber: #d97706;
+      --c-teal: #0d9488;
+      --c-slate: #475569;
+      --c-null: #94a3b8;
+
+      --badge-sig-bg: #dcfce7; --badge-sig-fg: #166534;
+      --badge-high-bg: #bbf7d0; --badge-high-fg: #14532d;
+      --badge-ext-bg: #dbeafe; --badge-ext-fg: #1e3a8a;
+
+      --caveat-bg: #fffbeb;
+      --caveat-border: #fde68a;
+      --caveat-text: #78350f;
+      --caveat-strong: #7c2d12;
+      --alert-bg: #eff6ff;
+      --alert-border: #bfdbfe;
+      --alert-text: #1e40af;
+      --alert-strong: #1e3a8a;
+
+      --tier-a-bg: #15803d; --tier-a-fg: #ffffff;
+      --tier-b-bg: #b45309; --tier-b-fg: #ffffff;
+      --tier-c-bg: #64748b; --tier-c-fg: #ffffff;
+
+      --chart-text: #64748b;
+      --chart-grid: rgba(148, 163, 184, 0.28);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      font-size: 0.95rem;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--nav-bg);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+      padding: 0.65rem 2rem;
+      display: flex;
+      gap: 1.25rem;
+      align-items: center;
+      overflow-x: auto;
+    }
+
+    nav .brand {
+      font-weight: 700;
+      font-size: 1.05rem;
+      color: var(--c-big);
+      margin-right: 0.5rem;
+      white-space: nowrap;
+    }
+
+    nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: color 0.15s;
+    }
+
+    nav a:hover { color: var(--c-big); }
+
+    main {
+      max-width: 1200px;
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+    }
+
+    .report-header {
+      background: linear-gradient(135deg, var(--header-a) 0%, var(--header-b) 100%);
+      color: #fff;
+      padding: 2.5rem;
+      border-radius: 12px;
+      margin-bottom: 2rem;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .report-header h1 {
+      font-size: 1.85rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      line-height: 1.25;
+      margin-bottom: 0.75rem;
+    }
+
+    .report-header .subtitle {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+      margin-bottom: 1.25rem;
+      font-weight: 400;
+    }
+
+    .report-header .date {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 1.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+    }
+
+    .report-header .abstract {
+      background: rgba(255, 255, 255, 0.05);
+      border-left: 4px solid var(--c-big);
+      padding: 1.25rem;
+      border-radius: 0 8px 8px 0;
+      font-size: 0.92rem;
+      color: var(--body-text);
+      line-height: 1.65;
+    }
+
+    .report-header .abstract strong {
+      color: #fff;
+    }
+
+    section {
+      margin-bottom: 3rem;
+      scroll-margin-top: 5rem;
+    }
+
+    h2 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--heading);
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 0.4rem;
+    }
+
+    h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--body-text);
+      margin: 1.5rem 0 0.75rem;
+    }
+
+    p {
+      margin-bottom: 1rem;
+      color: var(--body-text);
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: var(--shadow);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      text-align: center;
+    }
+
+    .stat-box .val {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1.1;
+      margin-bottom: 0.35rem;
+    }
+
+    .stat-box .lbl {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-weight: 600;
+    }
+
+    .finding {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 5px solid var(--c-big);
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      margin: 1.25rem 0;
+      box-shadow: var(--shadow);
+    }
+
+    .finding.scale { border-left-color: var(--c-diff); }
+    .finding.ernie { border-left-color: var(--c-purple); }
+    .finding.gemma { border-left-color: var(--c-small); }
+    .finding.liquid { border-left-color: var(--c-teal); }
+    .finding.null { border-left-color: var(--c-amber); }
+
+    .finding h4 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--heading);
+      margin-bottom: 0.5rem;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin: 1rem 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      text-align: left;
+    }
+
+    th, td {
+      padding: 0.65rem 0.9rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      background: var(--surface-alt);
+      font-weight: 600;
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--row-hover); }
+
+    td.num, th.num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .badge-sig {
+      background: var(--badge-sig-bg);
+      color: var(--badge-sig-fg);
+    }
+
+    .badge-high {
+      background: var(--badge-high-bg);
+      color: var(--badge-high-fg);
+    }
+
+    .badge-ext {
+      background: var(--badge-ext-bg);
+      color: var(--badge-ext-fg);
+    }
+
+    .chart-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.5rem;
+      margin: 1.5rem 0;
+      box-shadow: var(--shadow);
+    }
+
+    .chart-wrap canvas {
+      max-height: 420px;
+    }
+
+    .fig-caption {
+      font-size: 0.83rem;
+      color: var(--text-muted);
+      margin-top: 0.75rem;
+      line-height: 1.5;
+    }
+
+    .legend-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.25rem;
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      align-items: center;
+    }
+
+    .leg {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .leg-swatch {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.85em;
+      background: var(--code-bg);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      color: var(--text);
+    }
+
+    .alert {
+      background: var(--alert-bg);
+      border: 1px solid var(--alert-border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin: 1rem 0;
+      color: var(--alert-text);
+      font-size: 0.9rem;
+    }
+
+    .alert strong { color: var(--alert-strong); }
+
+/* --- evidence tiers (added by hc-stats-report) --- */
+.tier { display:inline-block; width:1.35rem; height:1.35rem; line-height:1.35rem;
+  text-align:center; border-radius:5px; font-weight:800; font-size:0.78rem; }
+.tier-A { background:var(--tier-a-bg); color:var(--tier-a-fg); }
+.tier-B { background:var(--tier-b-bg); color:var(--tier-b-fg); }
+.tier-C { background:var(--tier-c-bg); color:var(--tier-c-fg); }
+.tier-legend { display:flex; gap:1.25rem; flex-wrap:wrap; font-size:0.82rem;
+  color:var(--text-muted); margin:0.5rem 0 1rem; }
+.assess { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:1.25rem; }
+.assess .col { background:var(--surface); border:1px solid var(--border);
+  border-radius:10px; padding:1.25rem; }
+.assess .col.strong { border-top:4px solid var(--c-diff); }
+.assess .col.weak   { border-top:4px solid var(--c-amber); }
+.assess .col.open   { border-top:4px solid var(--c-slate); }
+.assess h4 { font-size:0.95rem; font-weight:700; margin-bottom:0.6rem; }
+.assess ul { margin:0 0 0 1.1rem; }
+.assess li { margin-bottom:0.5rem; font-size:0.88rem; color:var(--body-text); }
+.caveat { background:var(--caveat-bg); border:1px solid var(--caveat-border);
+  border-left:5px solid var(--c-amber); border-radius:8px; padding:1rem 1.25rem;
+  margin:1rem 0; font-size:0.9rem; color:var(--caveat-text); }
+.caveat strong { color:var(--caveat-strong); }
+.exp { background:var(--surface); border:1px solid var(--border); border-radius:8px;
+  padding:1rem 1.25rem; margin:0.85rem 0; }
+.exp h4 { font-size:0.95rem; font-weight:700; margin-bottom:0.4rem; color:var(--heading); }
+.exp .meta { font-size:0.8rem; color:var(--text-muted); text-transform:uppercase;
+  letter-spacing:0.04em; font-weight:600; margin-bottom:0.5rem; }
+.exp dl { display:grid; grid-template-columns:max-content 1fr; gap:0.3rem 0.9rem;
+  font-size:0.88rem; margin-top:0.5rem; }
+.exp dt { font-weight:600; color:var(--text-muted); }
+.exp dd { color:var(--body-text); }
+
+/* --- "main findings so far" + "checks done" (section 1) --- */
+.so-far { list-style:none; margin:0.5rem 0 1.5rem; padding:0; }
+.so-far li { display:flex; gap:0.75rem; align-items:flex-start;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:8px; padding:0.85rem 1rem; margin-bottom:0.6rem; }
+.so-far li .body { flex:1; }
+.so-far li .claim { font-size:0.92rem; color:var(--text); line-height:1.55; }
+.so-far li .ev { font-size:0.83rem; color:var(--text-muted); margin-top:0.3rem; }
+.so-far .since { display:inline-block; margin-left:0.5rem; font-size:0.72rem;
+  font-weight:600; letter-spacing:0.03em; text-transform:uppercase;
+  color:var(--text-muted); white-space:nowrap; }
+
+table.checks td:first-child { white-space:nowrap; }
+table.checks .since { display:block; font-size:0.72rem; font-weight:500;
+  color:var(--text-muted); text-transform:none; letter-spacing:0; }
+.status { display:inline-block; padding:0.15rem 0.5rem; border-radius:999px;
+  font-size:0.73rem; font-weight:700; text-transform:uppercase;
+  letter-spacing:0.03em; white-space:nowrap; }
+.status-done    { background:var(--badge-sig-bg);  color:var(--badge-sig-fg); }
+.status-partial { background:var(--caveat-bg);     color:var(--caveat-strong);
+                  border:1px solid var(--caveat-border); }
+.status-notrun  { background:rgba(148,163,184,0.16); color:var(--text-muted);
+                  border:1px solid var(--border); }
+
+.chart-svg { width:100%; height:auto; display:block; }
+.chart-svg text { font-family: var(--font-sans); }
+.abstract-card { background:var(--surface); border:1px solid var(--border); border-left:5px solid var(--c-big);
+  border-radius:8px; padding:1.5rem 1.75rem; box-shadow:var(--shadow); }
+.abstract-card .ptitle { font-size:1.15rem; font-weight:700; color:var(--heading); margin-bottom:0.9rem; line-height:1.35; }
+.abstract-card p { line-height:1.75; margin:0; }
+ul.plain { margin:0 0 1rem 1.2rem; } ul.plain li { margin-bottom:0.4rem; color:var(--body-text); }
+.lead { font-size:1.02rem; color:var(--text); }
+@media (max-width:640px){ main{padding:0 1rem;} .report-header{padding:1.5rem;} nav{padding:0.6rem 1rem;} }
+@media print { nav{display:none;} }
+</style></head>
+<body>
+<nav><span class="brand">HC-MoE</span><a href="#setup">Setup</a><a href="#findings">Findings</a><a href="#experiments">Experiments</a><a href="#dose">Dose-response</a><a href="#assessment">Strengths &amp; weaknesses</a><a href="#abstract">Paper abstract</a></nav>
+<main>
+<header class="report-header"><h1>HC-MoE: Summary of Work and Paper Draft</h1>
+<div class="subtitle">What the study has established through v19, the experiments behind each claim, an honest assessment, and a draft abstract</div>
+<div class="date">October 20, 2026 &middot; through report v19</div>
+<div class="abstract"><b>In one sentence.</b> In Qwen3, anomalous routing in the last MoE layer marks the tokens where a larger model helps most; the signal survives every control we ran, generalises beyond the studied benchmarks except on code, and fades to zero as the compute gap between the models closes.</div></header>
+
+<section id="setup"><h2>1. Setup</h2>
+<p>The question is whether a large MoE model&rsquo;s routing tells us, token by token, where it beats a smaller model of the same family. For each token we treat the per-expert routing scores of the large model&rsquo;s <b>last MoE layer</b> as p-values against an estimated null, and summarize them with Higher Criticism (HC), a statistic built to detect a few strong departures among many tests. We relate HC to token difficulty (CE<sub>big</sub>, CE<sub>small</sub>) and to <b>Intelligence Gain</b>, IG = CE<sub>small</sub> &minus; CE<sub>big</sub>.</p>
+<div class="table-wrap"><table><thead><tr><th>Family</th><th>Large (MoE)</th><th>Small (dense)</th><th>Routing in the measured layer</th><th class="num">Active ratio</th></tr></thead><tbody>
+<tr><td>Qwen</td><td>Qwen3-30B-A3B</td><td>Qwen3-0.6B</td><td>128 experts, top-8, no shared</td><td class="num">5.5&times;</td></tr>
+<tr><td>ERNIE</td><td>ERNIE-4.5-21B-A3B</td><td>ERNIE-4.5-0.3B</td><td>64 experts, top-6, 2 shared</td><td class="num">10&times;</td></tr>
+<tr><td>Gemma</td><td>gemma-4-26B-A4B</td><td>gemma-4-E2B</td><td>128 experts, top-8, 1 shared</td><td class="num">1.7&times;</td></tr>
+<tr><td>Liquid</td><td>LFM2-8B-A1B</td><td>LFM2-700M</td><td>32 experts, top-4</td><td class="num">2.0&times;</td></tr></tbody></table></div>
+<ul class="plain">
+<li><b>Grid:</b> nine studied benchmarks; five null estimators &times; two HC variants = ten configurations per cell; a claim needs 9 of 10 configurations to agree.</li>
+<li><b>Scale-specific test:</b> r(HC, IG) with either model&rsquo;s loss held fixed, computed within occurrences of the same token string.</li>
+<li><b>Inference:</b> floors at each cell&rsquo;s measured effective sample size (token autocorrelation costs about 2.6&times;), passage-level bootstrap, FDR control, held-out replication; every follow-up experiment had its decision rule written before the data.</li>
+</ul></section>
+
+<section id="findings"><h2>2. Main findings</h2>
+<p>Six claims hold up. Grade A = holds under every check run; B = holds, with a named sensitivity or a limited sample.</p>
+<div class="tier-legend"><span><span class="tier tier-A">A</span> robust under every check</span><span><span class="tier tier-B">B</span> holds, with a named sensitivity</span></div>
+<ul class="so-far"><li><span class="tier tier-A">A</span><div class="body"><div class="claim"><b>1. HC tracks token difficulty in every family.</b></div><div class="ev">31 and 28 of 36 benchmark&times;family cells are outside the noise floor against CE<sub>big</sub> and CE<sub>small</sub>. The sign is family-specific: positive in Qwen, ERNIE and Liquid, negative in Gemma.</div></div></li><li><span class="tier tier-A">A</span><div class="body"><div class="claim"><b>2. In Qwen3, HC marks the tokens where scale helps.</b></div><div class="ev">Mean r(HC, IG) = +0.058, positive on all nine studied benchmarks, strongest on lambada (+0.131, 95% CI +0.120 to +0.141). With either model&rsquo;s loss held fixed, within the same token string, the four strongest benchmarks stay positive in every configuration (+0.027 to +0.073). It replicates on held-out halves (r = 0.95 across cells), is not carried by outlier tokens, and is spread over several experts (82% survives removing the strongest).</div></div></li><li><span class="tier tier-B">B</span><div class="body"><div class="claim"><b>3. The association scales with the compute gap and goes to zero when it closes.</b></div><div class="ev">Holding Qwen3-30B-A3B fixed and growing the dense partner from 0.6B to 8B, the nine-benchmark mean of the scale-specific association falls +0.044 &rarr; +0.032 &rarr; +0.015 &rarr; +0.006.</div></div></li><li><span class="tier tier-B">B</span><div class="body"><div class="claim"><b>4. HC carries information that simpler last-layer statistics do not.</b></div><div class="ev">After router entropy, top-expert probability, logit gap and hidden-state norm are partialled out, 77% of the scale-specific association remains in competition_math and 49% in lambada (18% in race). The added variance is small, about 0.1% of within-string IG variance.</div></div></li><li><span class="tier tier-B">B</span><div class="body"><div class="claim"><b>5. The effect generalises out of domain, with code as a code-specific exception.</b></div><div class="ev">On six unseen benchmarks, Qwen meets the pre-registered prediction on news (+0.055), scientific papers (+0.035), chat (+0.014) and dialogue (+0.012), and fails on both code sets. At matched small-model loss, hard prose tokens are where HC marks the most gain and hard code tokens where it marks the least: all 10 code deciles sit below prose (mean gap &minus;0.124).</div></div></li><li><span class="tier tier-A">A</span><div class="body"><div class="claim"><b>6. Gemma 4 shows a robust reversed association, partly through its shared experts (B).</b></div><div class="ev">r(HC, IG) = &minus;0.045 on the studied grid and negative on all six unseen benchmarks in every configuration. Not explained by the compute gap, format tokens or router confidence; scaling every layer&rsquo;s shared expert to 0.75 removes 41% of the race inversion at a 3% loss cost.</div></div></li></ul>
+<div class="caveat"><strong>ERNIE-4.5 and LFM2</strong> show no consistent family-level association with IG: strong cells of both signs cancel across benchmarks.</div>
+</section>
+
+<section id="experiments"><h2>3. Experiments behind each finding</h2>
+<p>Each claim rests on experiments that were run, checked against earlier drops, and graded against rules fixed beforehand.</p>
+<div class="table-wrap"><table><thead><tr><th>Finding</th><th>Experiment</th><th>What it tested</th><th>Result</th><th>Report</th></tr></thead><tbody><tr><td>1</td><td>Primary grid, 36 cells &times; 10 configurations</td><td>r(HC, CE<sub>big</sub>), r(HC, CE<sub>small</sub>) per family and benchmark</td><td>31 and 28 of 36 cells outside the floor</td><td style="white-space:nowrap">v14</td></tr><tr><td>2</td><td>Two-sided difficulty control, within token strings</td><td>Whether HC tracks IG beyond either model&rsquo;s loss and token identity</td><td>All four Qwen tier-A cells positive in 10/10 configurations</td><td style="white-space:nowrap">v11&ndash;v13</td></tr><tr><td>2</td><td>Random held-out split</td><td>Whether cell correlations reproduce on unseen passages</td><td>r = 0.95 across 36 cells; every tier-A cell keeps sign</td><td style="white-space:nowrap">v10.5</td></tr><tr><td>2</td><td>Winsorisation, ranks, p<sub>min</sub> control</td><td>Outliers, ties, single-expert dominance</td><td>0.91&ndash;1.05 of r kept; 82% kept without the strongest expert</td><td style="white-space:nowrap">v8&ndash;v10</td></tr><tr><td>3</td><td>Four-partner compute sweep</td><td>Qwen3-30B-A3B with 0.6B, 1.7B, 4B and 8B dense partners</td><td>Scale-specific mean +0.044 &rarr; +0.006</td><td style="white-space:nowrap">v17&ndash;v18</td></tr><tr><td>4</td><td>Last-layer baselines</td><td>Entropy, top-expert probability, logit gap, hidden-state norm partialled out</td><td>77% (competition_math), 49% (lambada) remain</td><td style="white-space:nowrap">v15&ndash;v19</td></tr><tr><td>5</td><td>Six unseen benchmarks, pre-registered</td><td>Out-of-domain generalisation with measured floors</td><td>4/6 pass; both code sets fail</td><td style="white-space:nowrap">v15</td></tr><tr><td>5</td><td>Code vs prose at matched loss</td><td>Whether code&rsquo;s exception is a hard-token effect</td><td>Code below prose in 10/10 matched deciles</td><td style="white-space:nowrap">v19</td></tr><tr><td>6</td><td>Gemma on 15 benchmarks; formatting and baseline controls</td><td>Robustness of the inversion</td><td>Negative on every benchmark, every configuration</td><td style="white-space:nowrap">v15&ndash;v16</td></tr><tr><td>6</td><td>Shared-expert ablation, all layers</td><td>Whether the shared experts carry Gemma&rsquo;s inversion</td><td>41% smaller at &alpha; = 0.75, +3.4% loss</td><td style="white-space:nowrap">v18</td></tr><tr><td>Method</td><td>Block bootstrap, measured ESS, five null estimators</td><td>Whether significance is honest</td><td>Autocorrelation costs ~2.6&times;; conclusions stable across estimators</td><td style="white-space:nowrap">v6&ndash;v10</td></tr></tbody></table></div>
+</section>
+
+<section id="dose"><h2>4. Dose-response</h2>
+<div class="chart-wrap"><h3 style="margin-top:0">The scale-specific signal falls to the noise floor as the dense partner grows</h3>
+<p style="font-size:0.88rem;color:var(--text-muted)">Qwen3-30B-A3B held fixed; Pearson r, mean over nine benchmarks and ten null configurations</p>
+<svg class="chart-svg" viewBox="0 0 760 330" role="img" aria-label="The scale-specific signal falls to the noise floor as the dense partner grows"><rect x="70" y="178.9" width="490" height="71.1" fill="var(--c-null)" fill-opacity="0.16"/><text x="78" y="243.0" font-size="12" fill="var(--text-muted)">noise floor (&#177;0.0128)</text><line x1="70" x2="560" y1="270.0" y2="270.0" stroke="var(--chart-grid)" stroke-width="1"/><text x="60" y="274.0" text-anchor="end" font-size="12" fill="var(--text-muted)">-0.02</text><line x1="70" x2="560" y1="214.4" y2="214.4" stroke="var(--text-muted)" stroke-width="1"/><text x="60" y="218.4" text-anchor="end" font-size="12" fill="var(--text-muted)">0.00</text><line x1="70" x2="560" y1="158.9" y2="158.9" stroke="var(--chart-grid)" stroke-width="1"/><text x="60" y="162.9" text-anchor="end" font-size="12" fill="var(--text-muted)">0.02</text><line x1="70" x2="560" y1="103.3" y2="103.3" stroke="var(--chart-grid)" stroke-width="1"/><text x="60" y="107.3" text-anchor="end" font-size="12" fill="var(--text-muted)">0.04</text><line x1="70" x2="560" y1="47.8" y2="47.8" stroke="var(--chart-grid)" stroke-width="1"/><text x="60" y="51.8" text-anchor="end" font-size="12" fill="var(--text-muted)">0.06</text><path d="M70.0,48.9 L233.3,76.1 L396.7,142.5 L560.0,172.2" fill="none" stroke="var(--c-slate)" stroke-width="2"/><circle cx="70.0" cy="48.9" r="4" fill="var(--c-slate)"><title>Raw correlation, 0.6B partner: +0.060</title></circle><circle cx="233.3" cy="76.1" r="4" fill="var(--c-slate)"><title>Raw correlation, 1.7B partner: +0.050</title></circle><circle cx="396.7" cy="142.5" r="4" fill="var(--c-slate)"><title>Raw correlation, 4B partner: +0.026</title></circle><circle cx="560.0" cy="172.2" r="4" fill="var(--c-slate)"><title>Raw correlation, 8B partner: +0.015</title></circle><text x="572" y="176.2" font-size="13" font-weight="400" fill="var(--c-slate)">Raw correlation +0.015</text><path d="M70.0,92.5 L233.3,124.4 L396.7,173.9 L560.0,197.2" fill="none" stroke="var(--c-big)" stroke-width="3"/><circle cx="70.0" cy="92.5" r="5" fill="var(--c-big)"><title>Scale-specific, 0.6B partner: +0.044</title></circle><circle cx="233.3" cy="124.4" r="5" fill="var(--c-big)"><title>Scale-specific, 1.7B partner: +0.032</title></circle><circle cx="396.7" cy="173.9" r="5" fill="var(--c-big)"><title>Scale-specific, 4B partner: +0.015</title></circle><circle cx="560.0" cy="197.2" r="5" fill="var(--c-big)"><title>Scale-specific, 8B partner: +0.006</title></circle><text x="572" y="201.2" font-size="13" font-weight="700" fill="var(--c-big)">Scale-specific +0.006</text><text x="82.0" y="82.5" text-anchor="start" font-size="13" font-weight="700" fill="var(--text)">+0.044</text><text x="70.0" y="294" text-anchor="middle" font-size="13" fill="var(--text)">0.6B partner</text><text x="70.0" y="311" text-anchor="middle" font-size="12" fill="var(--text-muted)">5.5&#215; active ratio</text><text x="233.3" y="294" text-anchor="middle" font-size="13" fill="var(--text)">1.7B partner</text><text x="233.3" y="311" text-anchor="middle" font-size="12" fill="var(--text-muted)">1.94&#215; active ratio</text><text x="396.7" y="294" text-anchor="middle" font-size="13" fill="var(--text)">4B partner</text><text x="396.7" y="311" text-anchor="middle" font-size="12" fill="var(--text-muted)">0.82&#215; active ratio</text><text x="560.0" y="294" text-anchor="middle" font-size="13" fill="var(--text)">8B partner</text><text x="560.0" y="311" text-anchor="middle" font-size="12" fill="var(--text-muted)">0.41&#215; active ratio</text></svg>
+<div class="fig-caption">Source: HC-MoE v18, sections 24&ndash;25 &middot; four partners &times; nine benchmarks &times; ten configurations.</div></div>
+<p>The raw correlation falls too, but the scale-specific part &mdash; what survives holding either model&rsquo;s loss fixed &mdash; drops tenfold: it sits just above the noise floor once the dense partner has more active parameters than the MoE model (4B) and inside it at 8B. This is the figure the paper should lead with.</p>
+</section>
+
+<section id="assessment"><h2>5. Strengths and weaknesses</h2>
+<div class="assess">
+<div class="col strong"><h4>Strengths</h4><ul><li><b>Rigorous inference.</b> Noise floors at measured effective sample size, five null estimators, passage bootstrap, held-out replication, exact reproduction checks on every new drop, and pre-registered rules applied as written, including when they went against us.</li><li><b>A dose-response, not only a correlation.</b> With the large model fixed, the signal shrinks to zero as the dense partner grows. This is the closest the study comes to causal evidence and the strongest figure.</li><li><b>The obvious objections are answered.</b> Both difficulty controls, within-token-string analysis and four same-layer baselines rule out &ldquo;it is just token difficulty&rdquo; and &ldquo;it is just router confidence&rdquo;.</li><li><b>Tested out of domain, with the exception explained.</b> The claim passes on four of six unseen benchmarks chosen in advance, and the code exception is shown to be specific to code rather than to hard tokens.</li><li><b>A real family contrast.</b> Gemma&rsquo;s inversion is robust across 15 benchmarks and partly traced to its shared experts.</li></ul></div>
+<div class="col weak"><h4>Weaknesses</h4><ul><li><b>Small effects and no application.</b> r &le; 0.13, and HC adds about 0.1% of within-string IG variance beyond simple router statistics. &ldquo;So what?&rdquo; is the most likely rejection reason at a main track.</li><li><b>HC is distinct from simpler signals, not better.</b> Top-expert probability predicts IG about as well on its own; the contribution is a diagnostic, not a superior statistic.</li><li><b>One layer.</b> Every result comes from the last MoE layer; the layer sweep is deferred.</li><li><b>The positive claim rests mostly on one model.</b> Qwen carries it, Gemma inverts, ERNIE and LFM2 are null.</li><li><b>Loose ends.</b> race is largely absorbed by the hidden-state norm (18% remains); Gemma&rsquo;s inversion is only about two-fifths explained; why code reverses is unknown; two drops used a 207k-token subset of fineweb-edu.</li><li><b>Observational.</b> Apart from the shared-expert ablation, no experiment intervenes on routing.</li></ul></div>
+</div></section>
+
+<section id="abstract"><h2>6. Draft paper abstract</h2>
+<div class="abstract-card"><div class="ptitle">Routing Anomalies Mark Where Scale Helps: Higher Criticism on Mixture-of-Experts Routing</div>
+<p>Mixture-of-Experts (MoE) language models route each token to a few experts, but whether that routing reveals where model scale pays off is unknown. For each token, we treat the routing scores of a large MoE model&rsquo;s final MoE layer as p-values against an estimated null and summarize them with Higher Criticism (HC), a statistic designed to detect a few strong departures among many tests. We relate HC to Intelligence Gain (IG), the per-token loss reduction over a dense small model from the same family, using five null estimators, passage-level bootstrap, autocorrelation-corrected effective sample sizes, and decision rules fixed before each follow-up experiment. Across four model pairs (Qwen3, ERNIE-4.5, Gemma 4, LFM2), HC tracks token difficulty in every family. In Qwen3-30B-A3B it also marks where scale helps: the association holds with either model&rsquo;s loss controlled, within occurrences of the same token string, on held-out text, and on unseen news, scientific and conversational text. Holding the large model fixed, it shrinks steadily to zero as the dense partner grows from 0.6B to 8B parameters, and much of it persists after controlling for router entropy, top-expert probability, logit gap and hidden-state norm. Code is a systematic exception: at matched small-model loss, hard prose tokens are where HC marks the most gain and hard code tokens where it marks the least. Gemma 4 shows a robust reversed association, partly carried by its shared experts. Effects are small (r &le; 0.13), positioning HC as a diagnostic of scaling benefit rather than a routing signal.</p></div>
+<div class="assess" style="margin-top:1.5rem">
+<div class="col open"><h4>What the paper can leave out</h4><p style="font-size:0.88rem">These were exploration or dead ends; omitting them does not change what the claims mean.</p><ul><li>The retired IG-percentile &ldquo;layer&rdquo; slices and the early full-grid significance counts.</li><li>Top-ventile surge analyses, which depend on the null estimator.</li><li>Hypotheses tested and rejected along the way: active compute for lambada&rsquo;s 4B reversal, copying and unpredictable naming for code, the last-layer-only shared-expert arm.</li><li>The dialogue speaker-tag test (8/10, one configuration short of its rule) and the drops that failed reproduction.</li></ul></div>
+<div class="col strong"><h4>What should stay</h4><p style="font-size:0.88rem">Leaving these out would change what the remaining claims mean, and a reviewer can find them.</p><ul><li><b>ERNIE and LFM2</b> in the main results table, one sentence each. Dropping two of four families after seeing them is selective reporting.</li><li><b>The code exception.</b> The out-of-domain test was pre-registered on six benchmarks; claiming generalisation without naming code overstates it. Framed as &ldquo;code-specific&rdquo; it reads as a finding.</li><li><b>&ldquo;Distinct from, not better than&rdquo; the simple router signals.</b> Claiming HC is the best predictor would be contradicted by our own baseline numbers.</li><li><b>The last-layer scope</b> and the small effect sizes, stated once in the limitations.</li></ul></div>
+</div></section>
+</main></body></html>
